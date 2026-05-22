@@ -38,8 +38,7 @@ import {
   quotes,
   recentSales,
   Sale,
-  SaleItem,
-  suppliers
+  SaleItem
 } from "@/lib/demo-data";
 
 type AdminDashboardProps = {
@@ -352,15 +351,7 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
   const [inventoryFormOpen, setInventoryFormOpen] = useState(false);
   const [inventoryPending, setInventoryPending] = useState(false);
   const [salesRecords, setSalesRecords] = useState<Sale[]>(isDemo ? recentSales : []);
-  const [supplierRecords, setSupplierRecords] = useState<SupplierRecord[]>(
-    isDemo ? suppliers.map((supplier, index) => ({
-      id: `supplier-${index}`,
-      name: supplier.name,
-      category: supplier.category,
-      phone: supplier.phone,
-      active: supplier.active
-    })) : []
-  );
+  const [supplierRecords, setSupplierRecords] = useState<SupplierRecord[]>([]);
   const [purchaseRecords, setPurchaseRecords] = useState<PurchaseRecord[]>(
     isDemo ? inventory.slice(0, 4).map((item) => ({
       id: `purchase-${item.id}`,
