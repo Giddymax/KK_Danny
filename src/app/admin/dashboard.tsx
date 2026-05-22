@@ -1172,6 +1172,10 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
   }
 
   async function signOut() {
+    const supabase = createBrowserSupabaseClient();
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
     window.location.href = "/admin/login";
   }
 
