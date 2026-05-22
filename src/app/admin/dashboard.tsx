@@ -173,17 +173,32 @@ const navItems = [
   { key: "settings", label: "Settings", icon: Settings }
 ] as const;
 
-const revenueBars = [
-  { label: "Dec", value: 21800 },
-  { label: "Jan", value: 26350 },
-  { label: "Feb", value: 24140 },
-  { label: "Mar", value: 31980 },
-  { label: "Apr", value: 34640 },
-  { label: "May", value: 38920 }
-];
-
 function saleTotal(sale: Sale) {
   return sale.items.reduce((sum, item) => sum + item.price * item.quantity, 0) - sale.discount;
+}
+
+function parseSaleDate(dateStr: string): Date | null {
+  if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+    return new Date(dateStr.replace(" ", "T"));
+  }
+  const m = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m) return new Date(`${m[3]}-${m[2]}-${m[1]}`);
+  return null;
+}
+
+function computeRevenueBars(sales: Sale[]): { label: string; value: number }[] {
+  const now = new Date();
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+    const label = d.toLocaleString("en-GB", { month: "short" });
+    const value = sales
+      .filter((sale) => {
+        const sd = parseSaleDate(sale.date);
+        return sd !== null && sd.getFullYear() === d.getFullYear() && sd.getMonth() === d.getMonth();
+      })
+      .reduce((sum, sale) => sum + saleTotal(sale), 0);
+    return { label, value };
+  });
 }
 
 function statusFor(total: number, paid: number) {
@@ -323,33 +338,31 @@ function settingsToFields(settings: SettingsRecord): ManagedField[] {
 export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
   const [active, setActive] = useState<(typeof navItems)[number]["key"]>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [cart, setCart] = useState<CartLine[]>([
-    { id: "cement-ghacem", name: "Ghacem Cement", quantity: 4, price: 98 }
-  ]);
+  const [cart, setCart] = useState<CartLine[]>([]);
   const [customer, setCustomer] = useState("Walk-in");
   const [phone, setPhone] = useState("");
   const [discount, setDiscount] = useState(0);
-  const [amountPaid, setAmountPaid] = useState(392);
+  const [amountPaid, setAmountPaid] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [receipt, setReceipt] = useState<Sale | null>(null);
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(inventory);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(isDemo ? inventory : []);
   const [inventoryStatus, setInventoryStatus] = useState("");
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [inventoryForm, setInventoryForm] = useState<InventoryFormState>(inventoryItemToForm());
   const [inventoryFormOpen, setInventoryFormOpen] = useState(false);
   const [inventoryPending, setInventoryPending] = useState(false);
-  const [salesRecords, setSalesRecords] = useState<Sale[]>(recentSales);
+  const [salesRecords, setSalesRecords] = useState<Sale[]>(isDemo ? recentSales : []);
   const [supplierRecords, setSupplierRecords] = useState<SupplierRecord[]>(
-    suppliers.map((supplier, index) => ({
+    isDemo ? suppliers.map((supplier, index) => ({
       id: `supplier-${index}`,
       name: supplier.name,
       category: supplier.category,
       phone: supplier.phone,
       active: supplier.active
-    }))
+    })) : []
   );
   const [purchaseRecords, setPurchaseRecords] = useState<PurchaseRecord[]>(
-    inventory.slice(0, 4).map((item) => ({
+    isDemo ? inventory.slice(0, 4).map((item) => ({
       id: `purchase-${item.id}`,
       name: item.name,
       category: item.supplier,
@@ -357,10 +370,10 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
       unitCost: item.price,
       date: "2026-05-19",
       active: true
-    }))
+    })) : []
   );
   const [expenseRecords, setExpenseRecords] = useState<ExpenseRecord[]>(
-    expenses.map((expense, index) => ({
+    isDemo ? expenses.map((expense, index) => ({
       id: `expense-${index}`,
       category: expense.category,
       amount: expense.amount,
@@ -368,33 +381,35 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
       date: expense.date,
       staff: expense.staff,
       active: true
-    }))
+    })) : []
   );
   const [quoteRecords, setQuoteRecords] = useState<QuoteRecord[]>(
-    quotes.map((quote, index) => ({
+    isDemo ? quotes.map((quote, index) => ({
       id: `quote-${index}`,
       customer: quote.customer,
       phone: quote.phone,
       request: quote.request,
       status: quote.status,
       active: true
-    }))
+    })) : []
   );
   const [customerRecords, setCustomerRecords] = useState<CustomerRecord[]>(
-    customers.map((customer, index) => ({
+    isDemo ? customers.map((customer, index) => ({
       id: `customer-${index}`,
       name: customer.name,
       phone: customer.phone,
       balance: customer.balance,
       visits: customer.visits,
       active: true
-    }))
+    })) : []
   );
-  const [staffRecords, setStaffRecords] = useState<StaffRecord[]>([
-    { id: "staff-admin", name: "Admin", role: "admin", email: "admin@kkdanny.com", active: true },
-    { id: "staff-shop", name: "Shop Staff", role: "staff", email: "staff@kkdanny.com", active: true },
-    { id: "staff-accounts", name: "Accounts", role: "admin", email: "accounts@kkdanny.com", active: true }
-  ]);
+  const [staffRecords, setStaffRecords] = useState<StaffRecord[]>(
+    isDemo ? [
+      { id: "staff-admin", name: "Admin", role: "admin", email: "admin@kkdanny.com", active: true },
+      { id: "staff-shop", name: "Shop Staff", role: "staff", email: "staff@kkdanny.com", active: true },
+      { id: "staff-accounts", name: "Accounts", role: "admin", email: "accounts@kkdanny.com", active: true }
+    ] : []
+  );
   const [settingsRecord, setSettingsRecord] = useState<SettingsRecord>({
     name: brand.name,
     location: brand.location,
@@ -411,7 +426,18 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
   );
   const total = Math.max(subtotal - discount, 0);
   const lowStock = inventoryItems.filter((item) => !item.isService && item.stock <= item.threshold);
-  const revenue = salesRecords.reduce((sum, sale) => sum + saleTotal(sale), 0);
+  const today = new Date();
+  const todayRevenue = salesRecords
+    .filter((sale) => {
+      const d = parseSaleDate(sale.date);
+      return d !== null && d.toDateString() === today.toDateString();
+    })
+    .reduce((sum, sale) => sum + saleTotal(sale), 0);
+  const todaySalesCount = salesRecords.filter((sale) => {
+    const d = parseSaleDate(sale.date);
+    return d !== null && d.toDateString() === today.toDateString();
+  }).length;
+  const pendingQuotesCount = quoteRecords.filter((q) => q.status === "New").length;
   const activeLabel = navItems.find((item) => item.key === active)?.label ?? "Dashboard";
 
   useEffect(() => {
@@ -1265,9 +1291,11 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
 
         {active === "dashboard" ? (
           <DashboardOverview
-            revenue={revenue}
+            revenue={todayRevenue}
             lowStockCount={lowStock.length}
             sales={salesRecords}
+            todaySalesCount={todaySalesCount}
+            pendingQuotesCount={pendingQuotesCount}
             onNewSale={() => setActive("pos")}
             onAddStock={() => {
               setActive("inventory");
@@ -1366,7 +1394,13 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
             onDelete={(row) => deleteManagedRecord("customer", row.id, row.name)}
           />
         ) : null}
-        {active === "reports" ? <ReportsPanel /> : null}
+        {active === "reports" ? (
+          <ReportsPanel
+            inventoryItems={inventoryItems}
+            expenseRecords={expenseRecords}
+            customerRecords={customerRecords}
+          />
+        ) : null}
         {active === "staff" ? (
           <StaffPanel
             rows={staffRecords}
@@ -1406,6 +1440,8 @@ function DashboardOverview({
   revenue,
   lowStockCount,
   sales,
+  todaySalesCount,
+  pendingQuotesCount,
   onNewSale,
   onAddStock,
   onCreateQuote,
@@ -1414,18 +1450,21 @@ function DashboardOverview({
   revenue: number;
   lowStockCount: number;
   sales: Sale[];
+  todaySalesCount: number;
+  pendingQuotesCount: number;
   onNewSale: () => void;
   onAddStock: () => void;
   onCreateQuote: () => void;
   onReprintReceipt: () => void;
 }) {
-  const maxRevenue = Math.max(...revenueBars.map((bar) => bar.value));
+  const bars = computeRevenueBars(sales);
+  const maxRevenue = Math.max(...bars.map((bar) => bar.value), 1);
 
   return (
     <section className="dashboard-grid">
       <MetricCard icon={BadgeDollarSign} label="Revenue today" value={formatGhs(revenue)} tone="green" />
-      <MetricCard icon={ReceiptText} label="Sales today" value="3 receipts" tone="gold" />
-      <MetricCard icon={ClipboardList} label="Pending quotes" value="3 open" tone="blue" />
+      <MetricCard icon={ReceiptText} label="Sales today" value={`${todaySalesCount} receipt${todaySalesCount !== 1 ? "s" : ""}`} tone="gold" />
+      <MetricCard icon={ClipboardList} label="Pending quotes" value={`${pendingQuotesCount} open`} tone="blue" />
       <MetricCard icon={Boxes} label="Low stock" value={`${lowStockCount} items`} tone="red" />
 
       <div className="panel chart-panel">
@@ -1437,13 +1476,13 @@ function DashboardOverview({
           <span className="badge">GHS</span>
         </div>
         <div className="bar-chart" aria-label="Revenue chart">
-          {revenueBars.map((bar) => (
+          {bars.map((bar) => (
             <div key={bar.label} className="bar-item">
               <div className="bar-track">
                 <span style={{ height: `${(bar.value / maxRevenue) * 100}%` }} />
               </div>
               <strong>{bar.label}</strong>
-              <small>{Math.round(bar.value / 1000)}k</small>
+              <small>{bar.value > 0 ? `${Math.round(bar.value / 1000)}k` : "—"}</small>
             </div>
           ))}
         </div>
@@ -2063,13 +2102,47 @@ function CustomersPanel({
   );
 }
 
-function ReportsPanel() {
+function ReportsPanel({
+  inventoryItems,
+  expenseRecords,
+  customerRecords
+}: {
+  inventoryItems: InventoryItem[];
+  expenseRecords: ExpenseRecord[];
+  customerRecords: CustomerRecord[];
+}) {
+  const inventoryValue = inventoryItems
+    .filter((item) => !item.isService)
+    .reduce((sum, item) => sum + item.price * item.stock, 0);
+
+  const now = new Date();
+  const expensesThisMonth = expenseRecords
+    .filter((expense) => {
+      const d = new Date(expense.date);
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    })
+    .reduce((sum, expense) => sum + expense.amount, 0);
+
+  const topCategory = (() => {
+    const byValue: Record<string, number> = {};
+    for (const item of inventoryItems) {
+      if (!item.isService) {
+        byValue[item.category] = (byValue[item.category] ?? 0) + item.price * item.stock;
+      }
+    }
+    const entries = Object.entries(byValue);
+    if (!entries.length) return "—";
+    return entries.sort(([, a], [, b]) => b - a)[0][0];
+  })();
+
+  const openBalances = customerRecords.reduce((sum, c) => sum + c.balance, 0);
+
   return (
     <section className="dashboard-grid">
-      <MetricCard icon={BadgeDollarSign} label="Inventory value" value={formatGhs(42180)} tone="green" />
-      <MetricCard icon={CreditCard} label="Expenses month" value={formatGhs(745)} tone="red" />
-      <MetricCard icon={Boxes} label="Top category" value="Cement" tone="gold" />
-      <MetricCard icon={ClipboardList} label="Open balances" value={formatGhs(525)} tone="blue" />
+      <MetricCard icon={BadgeDollarSign} label="Inventory value" value={inventoryValue > 0 ? formatGhs(inventoryValue) : "—"} tone="green" />
+      <MetricCard icon={CreditCard} label="Expenses this month" value={expensesThisMonth > 0 ? formatGhs(expensesThisMonth) : "—"} tone="red" />
+      <MetricCard icon={Boxes} label="Top category" value={topCategory} tone="gold" />
+      <MetricCard icon={ClipboardList} label="Open balances" value={openBalances > 0 ? formatGhs(openBalances) : "—"} tone="blue" />
       <div className="panel wide-panel">
         <div className="panel-heading">
           <div>
