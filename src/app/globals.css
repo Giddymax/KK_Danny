@@ -754,6 +754,17 @@ select:focus {
   gap: 12px;
 }
 
+.checkout-actions {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.38fr) minmax(220px, 0.62fr);
+  gap: 10px;
+}
+
+.checkout-actions .primary-action,
+.checkout-actions .secondary-action {
+  width: 100%;
+}
+
 .table-wrap {
   width: 100%;
   overflow-x: auto;
@@ -1077,6 +1088,7 @@ th {
 
   .form-grid,
   .quick-actions,
+  .checkout-actions,
   .settings-layout {
     grid-template-columns: 1fr;
   }

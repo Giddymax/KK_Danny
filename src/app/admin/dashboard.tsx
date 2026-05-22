@@ -1105,6 +1105,26 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
     );
   }
 
+  function updateQuantityInput(id: string, value: string) {
+    setCart((current) =>
+      current.map((line) => (line.id === id ? { ...line, quantity: value === "" ? 0 : Number(value) } : line))
+    );
+  }
+
+  function normalizeQuantity(id: string) {
+    setCart((current) =>
+      current.map((line) =>
+        line.id === id && (!Number.isFinite(line.quantity) || line.quantity < 1)
+          ? { ...line, quantity: 1 }
+          : line
+      )
+    );
+  }
+
+  function clearCart() {
+    setCart([]);
+  }
+
   function createReceipt() {
     const now = new Date();
     setReceipt({
@@ -1244,7 +1264,21 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
         </div>
 
         {active === "dashboard" ? (
-          <DashboardOverview revenue={revenue} lowStockCount={lowStock.length} sales={salesRecords} />
+          <DashboardOverview
+            revenue={revenue}
+            lowStockCount={lowStock.length}
+            sales={salesRecords}
+            onNewSale={() => setActive("pos")}
+            onAddStock={() => {
+              setActive("inventory");
+              openInventoryForm();
+            }}
+            onCreateQuote={() => {
+              setActive("quotes");
+              openManagedEditor("quote");
+            }}
+            onReprintReceipt={() => setActive("sales")}
+          />
         ) : null}
         {active === "pos" ? (
           <PosPanel
@@ -1262,7 +1296,9 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
             onAmountPaidChange={setAmountPaid}
             onPaymentMethodChange={setPaymentMethod}
             onAddToCart={addToCart}
-            onQuantityChange={updateQuantity}
+            onQuantityInput={updateQuantityInput}
+            onQuantityBlur={normalizeQuantity}
+            onClearCart={clearCart}
             onCheckout={createReceipt}
             inventoryItems={inventoryItems}
           />
@@ -1369,11 +1405,19 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
 function DashboardOverview({
   revenue,
   lowStockCount,
-  sales
+  sales,
+  onNewSale,
+  onAddStock,
+  onCreateQuote,
+  onReprintReceipt
 }: {
   revenue: number;
   lowStockCount: number;
   sales: Sale[];
+  onNewSale: () => void;
+  onAddStock: () => void;
+  onCreateQuote: () => void;
+  onReprintReceipt: () => void;
 }) {
   const maxRevenue = Math.max(...revenueBars.map((bar) => bar.value));
 
@@ -1413,16 +1457,16 @@ function DashboardOverview({
           </div>
         </div>
         <div className="quick-actions">
-          <button type="button">
+          <button type="button" onClick={onNewSale}>
             <ShoppingCart size={18} /> New sale
           </button>
-          <button type="button">
+          <button type="button" onClick={onAddStock}>
             <PackagePlus size={18} /> Add stock
           </button>
-          <button type="button">
+          <button type="button" onClick={onCreateQuote}>
             <ClipboardList size={18} /> Create quote
           </button>
-          <button type="button">
+          <button type="button" onClick={onReprintReceipt}>
             <Printer size={18} /> Reprint receipt
           </button>
         </div>
@@ -1478,7 +1522,9 @@ function PosPanel({
   onAmountPaidChange,
   onPaymentMethodChange,
   onAddToCart,
-  onQuantityChange,
+  onQuantityInput,
+  onQuantityBlur,
+  onClearCart,
   onCheckout,
   inventoryItems
 }: {
@@ -1496,7 +1542,9 @@ function PosPanel({
   onAmountPaidChange: (value: number) => void;
   onPaymentMethodChange: (value: string) => void;
   onAddToCart: (item: InventoryItem) => void;
-  onQuantityChange: (id: string, quantity: number) => void;
+  onQuantityInput: (id: string, value: string) => void;
+  onQuantityBlur: (id: string) => void;
+  onClearCart: () => void;
   onCheckout: () => void;
   inventoryItems: InventoryItem[];
 }) {
@@ -1552,8 +1600,9 @@ function PosPanel({
               <input
                 type="number"
                 min="1"
-                value={line.quantity}
-                onChange={(event) => onQuantityChange(line.id, Number(event.target.value))}
+                value={line.quantity || ""}
+                onChange={(event) => onQuantityInput(line.id, event.target.value)}
+                onBlur={() => onQuantityBlur(line.id)}
                 aria-label={`Quantity for ${line.name}`}
               />
               <strong>{formatGhs(line.price * line.quantity)}</strong>
@@ -1598,10 +1647,16 @@ function PosPanel({
           <span>Balance <strong>{formatGhs(Math.max(total - amountPaid, 0))}</strong></span>
         </div>
 
-        <button type="button" className="primary-action" onClick={onCheckout} disabled={cart.length === 0}>
-          <ReceiptText size={18} />
-          Save sale & print receipt
-        </button>
+        <div className="checkout-actions">
+          <button type="button" className="secondary-action" onClick={onClearCart} disabled={cart.length === 0}>
+            <Trash2 size={18} />
+            Clear cart
+          </button>
+          <button type="button" className="primary-action" onClick={onCheckout} disabled={cart.length === 0}>
+            <ReceiptText size={18} />
+            Save sale & print receipt
+          </button>
+        </div>
       </div>
     </section>
   );
