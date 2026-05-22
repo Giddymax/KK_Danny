@@ -609,6 +609,7 @@ select:focus {
 .bar-track span {
   display: block;
   width: 100%;
+  height: var(--bar-h, 0%);
   min-height: 12px;
   background: linear-gradient(180deg, var(--gold-2), var(--green));
 }

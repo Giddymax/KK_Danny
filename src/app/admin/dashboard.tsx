@@ -1081,22 +1081,26 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
 
     try {
       if (supabase) {
-        const tableMap: Partial<Record<ManagedKind, string>> = {
-          sale: "sales",
-          supplier: "suppliers",
-          purchase: "purchases",
-          expense: "expenses",
-          quote: "quote_requests",
-          customer: "customers",
-          staff: "profiles"
-        };
-        const table = tableMap[kind];
-
-        if (table) {
-          const idColumn = kind === "sale" ? "sale_ref" : "id";
-          const payload = kind === "staff" ? { is_active: false } : { active: false };
-          const { error } = await supabase.from(table).update(payload).eq(idColumn, itemId);
+        if (kind === "supplier") {
+          const { error } = await supabase.from("suppliers").delete().eq("id", itemId);
           if (error) throw error;
+        } else {
+          const tableMap: Partial<Record<ManagedKind, string>> = {
+            sale: "sales",
+            purchase: "purchases",
+            expense: "expenses",
+            quote: "quote_requests",
+            customer: "customers",
+            staff: "profiles"
+          };
+          const table = tableMap[kind];
+
+          if (table) {
+            const idColumn = kind === "sale" ? "sale_ref" : "id";
+            const payload = kind === "staff" ? { is_active: false } : { active: false };
+            const { error } = await supabase.from(table).update(payload).eq(idColumn, itemId);
+            if (error) throw error;
+          }
         }
       }
 
@@ -1474,7 +1478,7 @@ function DashboardOverview({
           {bars.map((bar) => (
             <div key={bar.label} className="bar-item">
               <div className="bar-track">
-                <span style={{ height: `${(bar.value / maxRevenue) * 100}%` }} />
+                <span style={{ "--bar-h": `${(bar.value / maxRevenue) * 100}%` } as React.CSSProperties} />
               </div>
               <strong>{bar.label}</strong>
               <small>{bar.value > 0 ? `${Math.round(bar.value / 1000)}k` : "—"}</small>
