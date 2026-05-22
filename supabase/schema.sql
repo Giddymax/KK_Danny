@@ -1,10 +1,27 @@
 create extension if not exists "pgcrypto";
 
-create type public.app_role as enum ('admin', 'staff');
-create type public.sale_status as enum ('draft', 'paid', 'part_paid', 'overpaid', 'cancelled');
-create type public.quote_status as enum ('new', 'reviewed', 'quoted', 'completed', 'cancelled');
+do $$
+begin
+  create type public.app_role as enum ('admin', 'staff');
+exception
+  when duplicate_object then null;
+end $$;
 
-create table public.profiles (
+do $$
+begin
+  create type public.sale_status as enum ('draft', 'paid', 'part_paid', 'overpaid', 'cancelled');
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  create type public.quote_status as enum ('new', 'reviewed', 'quoted', 'completed', 'cancelled');
+exception
+  when duplicate_object then null;
+end $$;
+
+create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null,
   full_name text,
@@ -14,7 +31,7 @@ create table public.profiles (
   updated_at timestamptz not null default now()
 );
 
-create table public.categories (
+create table if not exists public.categories (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
   description text,
@@ -24,7 +41,7 @@ create table public.categories (
   updated_at timestamptz not null default now()
 );
 
-create table public.suppliers (
+create table if not exists public.suppliers (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   phone text,
@@ -36,7 +53,7 @@ create table public.suppliers (
   updated_at timestamptz not null default now()
 );
 
-create table public.products (
+create table if not exists public.products (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   sku text unique,
@@ -53,18 +70,37 @@ create table public.products (
   updated_at timestamptz not null default now()
 );
 
-create table public.customers (
+create table if not exists public.inventory_items (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  category text not null,
+  unit text not null default 'item',
+  price numeric(12,2) not null default 0 check (price >= 0),
+  stock numeric(12,2) not null default 0 check (stock >= 0),
+  threshold numeric(12,2) not null default 0 check (threshold >= 0),
+  supplier text,
+  is_service boolean not null default false,
+  active boolean not null default true,
+  created_by uuid references public.profiles(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.customers (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   phone text,
   email text,
   address text,
+  balance numeric(12,2) not null default 0 check (balance >= 0),
+  visits integer not null default 0 check (visits >= 0),
   notes text,
+  active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create table public.sales (
+create table if not exists public.sales (
   id uuid primary key default gen_random_uuid(),
   sale_ref text not null unique,
   customer_id uuid references public.customers(id),
@@ -77,12 +113,13 @@ create table public.sales (
   payment_method text not null default 'Cash',
   status public.sale_status not null default 'paid',
   notes text,
+  active boolean not null default true,
   created_by uuid references public.profiles(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create table public.sale_items (
+create table if not exists public.sale_items (
   id uuid primary key default gen_random_uuid(),
   sale_id uuid not null references public.sales(id) on delete cascade,
   product_id uuid references public.products(id),
@@ -93,21 +130,24 @@ create table public.sale_items (
   created_at timestamptz not null default now()
 );
 
-create table public.purchases (
+create table if not exists public.purchases (
   id uuid primary key default gen_random_uuid(),
   supplier_id uuid references public.suppliers(id),
   product_id uuid references public.products(id),
+  item_name text not null default '',
+  supplier_name text,
   quantity numeric(12,2) not null default 0,
   unit_cost numeric(12,2) not null default 0,
   total_cost numeric(12,2) not null default 0,
   purchase_date date not null default current_date,
   notes text,
+  active boolean not null default true,
   created_by uuid references public.profiles(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create table public.expenses (
+create table if not exists public.expenses (
   id uuid primary key default gen_random_uuid(),
   category text not null,
   amount numeric(12,2) not null default 0,
@@ -115,12 +155,13 @@ create table public.expenses (
   payment_method text not null default 'Cash',
   notes text,
   receipt_path text,
+  active boolean not null default true,
   created_by uuid references public.profiles(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create table public.quote_requests (
+create table if not exists public.quote_requests (
   id uuid primary key default gen_random_uuid(),
   customer_name text not null,
   phone text not null,
@@ -129,26 +170,27 @@ create table public.quote_requests (
   deadline date,
   details text,
   status public.quote_status not null default 'new',
+  active boolean not null default true,
   created_by uuid references public.profiles(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create table public.payment_methods (
+create table if not exists public.payment_methods (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
   active boolean not null default true,
   sort_order integer not null default 0
 );
 
-create table public.business_settings (
+create table if not exists public.business_settings (
   key text primary key,
   value jsonb not null,
   updated_at timestamptz not null default now(),
   updated_by uuid references public.profiles(id)
 );
 
-create table public.audit_logs (
+create table if not exists public.audit_logs (
   id uuid primary key default gen_random_uuid(),
   actor_id uuid references public.profiles(id),
   action text not null,
@@ -157,6 +199,29 @@ create table public.audit_logs (
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
+
+alter table public.customers
+  add column if not exists balance numeric(12,2) not null default 0 check (balance >= 0),
+  add column if not exists visits integer not null default 0 check (visits >= 0),
+  add column if not exists active boolean not null default true;
+
+alter table public.sales
+  add column if not exists active boolean not null default true;
+
+alter table public.purchases
+  add column if not exists item_name text not null default '',
+  add column if not exists supplier_name text,
+  add column if not exists active boolean not null default true;
+
+alter table public.expenses
+  add column if not exists active boolean not null default true;
+
+alter table public.quote_requests
+  add column if not exists active boolean not null default true;
+
+alter table public.inventory_items
+  add column if not exists created_by uuid references public.profiles(id),
+  add column if not exists active boolean not null default true;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -186,6 +251,7 @@ begin
 end;
 $$;
 
+drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.handle_new_user();
@@ -226,80 +292,131 @@ declare
 begin
   foreach tbl in array array[
     'profiles','categories','suppliers','products','customers','sales','sale_items',
-    'purchases','expenses','quote_requests','payment_methods','business_settings','audit_logs'
+    'inventory_items','purchases','expenses','quote_requests','payment_methods','business_settings','audit_logs'
   ]
   loop
     execute format('alter table public.%I enable row level security', tbl);
   end loop;
 end $$;
 
+grant select, insert, update, delete on
+  public.profiles,
+  public.categories,
+  public.suppliers,
+  public.products,
+  public.inventory_items,
+  public.customers,
+  public.sales,
+  public.sale_items,
+  public.purchases,
+  public.expenses,
+  public.quote_requests,
+  public.payment_methods,
+  public.business_settings
+to authenticated;
+
+drop policy if exists "profiles read own or admin" on public.profiles;
 create policy "profiles read own or admin" on public.profiles
 for select using (id = auth.uid() or public.is_admin());
+drop policy if exists "admins manage profiles" on public.profiles;
 create policy "admins manage profiles" on public.profiles
 for all using (public.is_admin()) with check (public.is_admin());
 
+drop policy if exists "staff read categories" on public.categories;
 create policy "staff read categories" on public.categories
 for select using (public.is_staff());
+drop policy if exists "admins manage categories" on public.categories;
 create policy "admins manage categories" on public.categories
 for all using (public.is_admin()) with check (public.is_admin());
 
+drop policy if exists "staff read suppliers" on public.suppliers;
 create policy "staff read suppliers" on public.suppliers
 for select using (public.is_staff());
+drop policy if exists "admins manage suppliers" on public.suppliers;
 create policy "admins manage suppliers" on public.suppliers
 for all using (public.is_admin()) with check (public.is_admin());
 
+drop policy if exists "staff manage products" on public.products;
 create policy "staff manage products" on public.products
 for all using (public.is_staff()) with check (public.is_staff());
 
+drop policy if exists "staff manage inventory items" on public.inventory_items;
+create policy "staff manage inventory items" on public.inventory_items
+for all using (public.is_staff()) with check (public.is_staff());
+
+drop policy if exists "staff manage customers" on public.customers;
 create policy "staff manage customers" on public.customers
 for all using (public.is_staff()) with check (public.is_staff());
 
+drop policy if exists "staff manage sales" on public.sales;
 create policy "staff manage sales" on public.sales
 for all using (public.is_staff()) with check (public.is_staff());
 
+drop policy if exists "staff manage sale items" on public.sale_items;
 create policy "staff manage sale items" on public.sale_items
 for all using (public.is_staff()) with check (public.is_staff());
 
+drop policy if exists "staff manage purchases" on public.purchases;
 create policy "staff manage purchases" on public.purchases
 for all using (public.is_staff()) with check (public.is_staff());
 
+drop policy if exists "staff manage expenses" on public.expenses;
 create policy "staff manage expenses" on public.expenses
 for all using (public.is_staff()) with check (public.is_staff());
 
+drop policy if exists "staff manage quotes" on public.quote_requests;
 create policy "staff manage quotes" on public.quote_requests
 for all using (public.is_staff()) with check (public.is_staff());
 
+drop policy if exists "staff read payment methods" on public.payment_methods;
 create policy "staff read payment methods" on public.payment_methods
 for select using (public.is_staff());
+drop policy if exists "admins manage payment methods" on public.payment_methods;
 create policy "admins manage payment methods" on public.payment_methods
 for all using (public.is_admin()) with check (public.is_admin());
 
+drop policy if exists "staff read settings" on public.business_settings;
 create policy "staff read settings" on public.business_settings
 for select using (public.is_staff());
+drop policy if exists "admins manage settings" on public.business_settings;
 create policy "admins manage settings" on public.business_settings
 for all using (public.is_admin()) with check (public.is_admin());
 
+drop policy if exists "admins read audit logs" on public.audit_logs;
 create policy "admins read audit logs" on public.audit_logs
 for select using (public.is_admin());
+drop policy if exists "staff insert audit logs" on public.audit_logs;
 create policy "staff insert audit logs" on public.audit_logs
 for insert with check (public.is_staff());
 
+drop trigger if exists profiles_updated_at on public.profiles;
 create trigger profiles_updated_at before update on public.profiles
 for each row execute function public.set_updated_at();
+drop trigger if exists categories_updated_at on public.categories;
 create trigger categories_updated_at before update on public.categories
 for each row execute function public.set_updated_at();
+drop trigger if exists suppliers_updated_at on public.suppliers;
 create trigger suppliers_updated_at before update on public.suppliers
 for each row execute function public.set_updated_at();
+drop trigger if exists products_updated_at on public.products;
 create trigger products_updated_at before update on public.products
 for each row execute function public.set_updated_at();
+drop trigger if exists inventory_items_updated_at on public.inventory_items;
+create trigger inventory_items_updated_at before update on public.inventory_items
+for each row execute function public.set_updated_at();
+drop trigger if exists customers_updated_at on public.customers;
 create trigger customers_updated_at before update on public.customers
 for each row execute function public.set_updated_at();
+drop trigger if exists sales_updated_at on public.sales;
 create trigger sales_updated_at before update on public.sales
 for each row execute function public.set_updated_at();
+drop trigger if exists purchases_updated_at on public.purchases;
 create trigger purchases_updated_at before update on public.purchases
 for each row execute function public.set_updated_at();
+drop trigger if exists expenses_updated_at on public.expenses;
 create trigger expenses_updated_at before update on public.expenses
 for each row execute function public.set_updated_at();
+drop trigger if exists quote_requests_updated_at on public.quote_requests;
 create trigger quote_requests_updated_at before update on public.quote_requests
 for each row execute function public.set_updated_at();
 
@@ -320,6 +437,87 @@ insert into public.payment_methods (name, sort_order) values
   ('Card', 40)
 on conflict (name) do nothing;
 
+insert into public.inventory_items (name, category, unit, price, stock, threshold, supplier, is_service) values
+  ('Ghacem Cement', 'Cement', 'bag', 98, 146, 35, 'Adeiso Depot', false),
+  ('Treated Wood 2x4', 'Wood', 'piece', 42, 68, 20, 'Central Timber', false),
+  ('Reinforcement Rod 12mm', 'Steel rods', 'length', 115, 18, 25, 'Eastern Steel', false),
+  ('Savanna Paint', 'Paint', 'bucket', 185, 32, 12, 'Paint House Ghana', false),
+  ('4 Inch Nails', 'Hardware', 'box', 58, 54, 16, 'Hardware Market', false),
+  ('Concrete Mixer Service', 'Equipment services', 'hour', 220, 0, 0, 'In-house', true)
+on conflict (name) do nothing;
+
+insert into public.customers (name, phone, balance, visits)
+select * from (values
+  ('Point 3 Project', '0244000000', 525, 8),
+  ('Asona Builders', '0249111111', 0, 14),
+  ('Ama Construction', '0247000000', 0, 3)
+) as seed(name, phone, balance, visits)
+where not exists (
+  select 1 from public.customers where public.customers.phone = seed.phone
+);
+
+insert into public.suppliers (name, phone, contact_person, notes)
+select * from (values
+  ('Adeiso Depot', '0245551000', 'Cement', 'Primary cement supplier'),
+  ('Central Timber', '0245552000', 'Wood', 'Timber and wood products'),
+  ('Eastern Steel', '0245553000', 'Steel rods', 'Steel rod supplier')
+) as seed(name, phone, contact_person, notes)
+where not exists (
+  select 1 from public.suppliers where public.suppliers.name = seed.name
+);
+
+insert into public.purchases (item_name, supplier_name, quantity, unit_cost, total_cost, purchase_date, notes)
+select
+  item_name,
+  supplier_name,
+  quantity,
+  unit_cost,
+  total_cost,
+  purchase_date::date,
+  notes
+from (values
+  ('Ghacem Cement', 'Adeiso Depot', 146, 98, 14308, '2026-05-19', 'Initial stock intake'),
+  ('Treated Wood 2x4', 'Central Timber', 68, 42, 2856, '2026-05-18', 'Initial stock intake'),
+  ('Reinforcement Rod 12mm', 'Eastern Steel', 18, 115, 2070, '2026-05-17', 'Initial stock intake'),
+  ('Savanna Paint', 'Paint House Ghana', 32, 185, 5920, '2026-05-16', 'Initial stock intake')
+) as seed(item_name, supplier_name, quantity, unit_cost, total_cost, purchase_date, notes)
+where not exists (
+  select 1 from public.purchases
+  where public.purchases.item_name = seed.item_name
+    and public.purchases.purchase_date = seed.purchase_date::date
+);
+
+insert into public.expenses (category, amount, expense_date, payment_method, notes)
+select
+  category,
+  amount,
+  expense_date::date,
+  payment_method,
+  notes
+from (values
+  ('Transport', 350, '2026-05-19', 'Cash', 'Admin'),
+  ('Loading boys', 120, '2026-05-18', 'Cash', 'Staff'),
+  ('Shop utilities', 275, '2026-05-17', 'Mobile Money', 'Admin')
+) as seed(category, amount, expense_date, payment_method, notes)
+where not exists (
+  select 1 from public.expenses
+  where public.expenses.category = seed.category
+    and public.expenses.expense_date = seed.expense_date::date
+);
+
+insert into public.quote_requests (customer_name, phone, requested_items, status)
+select customer_name, phone, requested_items, status::public.quote_status
+from (values
+  ('Ama Construction', '0247000000', '80 bags cement, rods, nails', 'new'),
+  ('Kojo Mensah', '0247111111', 'Roofing sheets and delivery', 'quoted'),
+  ('Site Foreman', '0247222222', 'Mixer service for 2 days', 'reviewed')
+) as seed(customer_name, phone, requested_items, status)
+where not exists (
+  select 1 from public.quote_requests
+  where public.quote_requests.phone = seed.phone
+    and public.quote_requests.requested_items = seed.requested_items
+);
+
 insert into public.business_settings (key, value) values
   ('profile', '{"name":"K.K. Danny Enterprise","tagline":"Building Materials & Services","location":"Adeiso, Ghana","address":"Opp. Radiance Gas filling station, Near Point 3 Hotel.","phones":["02444754803","0249986118","0240268125"],"logo":"/logo.jpeg"}'),
   ('receipt', '{"footer":"Thank you for your patronage!","paper_width":"80mm"}'),
@@ -334,18 +532,21 @@ insert into storage.buckets (id, name, public) values
   ('uploads', 'uploads', false)
 on conflict (id) do nothing;
 
+drop policy if exists "staff upload business files" on storage.objects;
 create policy "staff upload business files" on storage.objects
 for insert with check (
   bucket_id in ('product-images','supplier-documents','expense-receipts','quote-files','uploads')
   and public.is_staff()
 );
 
+drop policy if exists "staff read business files" on storage.objects;
 create policy "staff read business files" on storage.objects
 for select using (
   bucket_id in ('product-images','supplier-documents','expense-receipts','quote-files','uploads')
   and public.is_staff()
 );
 
+drop policy if exists "staff update business files" on storage.objects;
 create policy "staff update business files" on storage.objects
 for update using (
   bucket_id in ('product-images','supplier-documents','expense-receipts','quote-files','uploads')

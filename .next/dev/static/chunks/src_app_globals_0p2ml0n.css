@@ -256,6 +256,10 @@ img {
   display: inline-grid;
 }
 
+.icon-button.danger {
+  color: var(--red);
+}
+
 .form-row {
   flex-wrap: wrap;
   justify-content: space-between;
@@ -443,6 +447,16 @@ img {
   background: #e7f1f7;
   border: 1px solid #2f5f7c3d;
   margin: 0 0 18px;
+}
+
+.inline-alert {
+  border-radius: var(--radius);
+  color: #18394d;
+  background: #e7f1f7;
+  border: 1px solid #2f5f7c3d;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  font-weight: 750;
 }
 
 .mobile-close, .nav-toggle, .mobile-section-select {
@@ -738,6 +752,12 @@ th {
   display: grid;
 }
 
+.card-actions {
+  justify-content: flex-end;
+  gap: 8px;
+  display: flex;
+}
+
 .stack-row {
   justify-content: space-between;
   align-items: center;
@@ -788,11 +808,34 @@ th {
   overflow: auto;
 }
 
+.inventory-modal {
+  border-radius: var(--radius);
+  background: #fff;
+  width: min(720px, 100%);
+  max-height: min(760px, 92svh);
+  padding: 18px;
+  overflow: auto;
+}
+
 .modal-actions {
   justify-content: flex-end;
   gap: 10px;
   margin-bottom: 12px;
   display: flex;
+}
+
+.inventory-modal .modal-actions {
+  margin: 18px 0 0;
+}
+
+.inventory-modal .secondary-action, .inventory-modal .primary-action {
+  width: auto;
+  padding: 0 16px;
+}
+
+.editor-check {
+  align-self: end;
+  min-height: 44px;
 }
 
 .receipt-print-area {
@@ -980,6 +1023,10 @@ th {
   .inventory-card, .stack-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .card-actions {
+    justify-content: flex-start;
   }
 
   .inventory-meta {

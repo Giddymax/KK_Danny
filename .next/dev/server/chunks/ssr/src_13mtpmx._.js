@@ -33,11 +33,10 @@ __turbopack_context__.s([
     ()=>hasSupabaseEnv
 ]);
 function getSupabaseConfig() {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !key) {
-        return null;
-    }
+    const url = ("TURBOPACK compile-time value", "https://zoaqpykmvdwqgudjhsxo.supabase.co");
+    const key = ("TURBOPACK compile-time value", "sb_publishable_GkJimNIAahp9cACyLxF51Q_wabQoVhA") ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable
+    ;
     return {
         url,
         key
