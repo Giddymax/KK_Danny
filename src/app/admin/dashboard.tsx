@@ -1633,6 +1633,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
             salesRecords={salesRecords}
             expenseRecords={expenseRecords}
             customerRecords={customerRecords}
+            staffRecords={staffRecords}
           />
         ) : null}
         {active === "staff" ? (
@@ -2346,6 +2347,7 @@ function CustomersPanel({
 }
 
 type ReportPeriod = "today" | "yesterday" | "this-month" | "last-30" | "all";
+type ReportKind = "business" | "sales" | "low-stock" | "expenses" | "staff";
 
 function isWithinReportPeriod(dateValue: string, period: ReportPeriod) {
   if (period === "all") {
@@ -2396,15 +2398,17 @@ function ReportsPanel({
   inventoryItems,
   salesRecords,
   expenseRecords,
-  customerRecords
+  customerRecords,
+  staffRecords
 }: {
   inventoryItems: InventoryItem[];
   salesRecords: Sale[];
   expenseRecords: ExpenseRecord[];
   customerRecords: CustomerRecord[];
+  staffRecords: StaffRecord[];
 }) {
   const [period, setPeriod] = useState<ReportPeriod>("this-month");
-  const [reportOpen, setReportOpen] = useState(false);
+  const [reportKind, setReportKind] = useState<ReportKind | null>(null);
   const inventoryValue = inventoryItems
     .filter((item) => !item.isService)
     .reduce((sum, item) => sum + item.price * item.stock, 0);
@@ -2430,7 +2434,19 @@ function ReportsPanel({
   })();
 
   const openBalances = customerRecords.reduce((sum, c) => sum + c.balance, 0);
+  const lowStockItems = inventoryItems.filter((item) => !item.isService && item.stock <= item.threshold);
+  const staffActivity = staffRecords.map((staff) => {
+    const sales = filteredSales.filter((sale) => sale.staff === staff.name || sale.staff === staff.email);
+    return {
+      name: staff.name,
+      role: staff.role,
+      active: staff.active,
+      salesCount: sales.length,
+      salesAmount: sales.reduce((sum, sale) => sum + saleTotal(sale), 0)
+    };
+  });
   const reportSummary = {
+    kind: reportKind ?? "business",
     periodLabel: reportPeriodLabel(period),
     inventoryValue,
     salesAmount,
@@ -2440,7 +2456,11 @@ function ReportsPanel({
     openBalances,
     topCategory,
     salesCount: filteredSales.length,
-    lowStockCount: inventoryItems.filter((item) => !item.isService && item.stock <= item.threshold).length
+    lowStockCount: lowStockItems.length,
+    sales: filteredSales,
+    lowStockItems,
+    expenses: filteredExpenses,
+    staffActivity
   };
 
   return (
@@ -2452,7 +2472,7 @@ function ReportsPanel({
             <p className="eyebrow">Analysis period</p>
             <h2>Report filter</h2>
           </div>
-          <button type="button" className="small-action" onClick={() => setReportOpen(true)}>
+          <button type="button" className="small-action" onClick={() => setReportKind("business")}>
             <Printer size={15} /> Print report
           </button>
         </div>
@@ -2484,14 +2504,14 @@ function ReportsPanel({
           </div>
         </div>
         <div className="quick-actions">
-          <button type="button"><FileText size={18} /> Sales summary</button>
-          <button type="button"><Boxes size={18} /> Low-stock report</button>
-          <button type="button"><WalletCards size={18} /> Expense report</button>
-          <button type="button"><Users size={18} /> Staff activity</button>
+          <button type="button" onClick={() => setReportKind("sales")}><FileText size={18} /> Sales summary</button>
+          <button type="button" onClick={() => setReportKind("low-stock")}><Boxes size={18} /> Low-stock report</button>
+          <button type="button" onClick={() => setReportKind("expenses")}><WalletCards size={18} /> Expense report</button>
+          <button type="button" onClick={() => setReportKind("staff")}><Users size={18} /> Staff activity</button>
         </div>
       </div>
       </section>
-      {reportOpen ? <ReportPrintModal summary={reportSummary} onClose={() => setReportOpen(false)} /> : null}
+      {reportKind ? <ReportPrintModal summary={reportSummary} onClose={() => setReportKind(null)} /> : null}
     </>
   );
 }
@@ -2694,6 +2714,7 @@ function ReportPrintModal({
   onClose
 }: {
   summary: {
+    kind: ReportKind;
     periodLabel: string;
     inventoryValue: number;
     salesAmount: number;
@@ -2704,6 +2725,16 @@ function ReportPrintModal({
     topCategory: string;
     salesCount: number;
     lowStockCount: number;
+    sales: Sale[];
+    lowStockItems: InventoryItem[];
+    expenses: ExpenseRecord[];
+    staffActivity: {
+      name: string;
+      role: "admin" | "staff";
+      active: boolean;
+      salesCount: number;
+      salesAmount: number;
+    }[];
   };
   onClose: () => void;
 }) {
@@ -2711,6 +2742,14 @@ function ReportPrintModal({
     dateStyle: "medium",
     timeStyle: "short"
   });
+
+  const title = {
+    business: "Business Report",
+    sales: "Sales Summary",
+    "low-stock": "Low-Stock Report",
+    expenses: "Expense Report",
+    staff: "Staff Activity"
+  }[summary.kind];
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Business report preview">
@@ -2730,26 +2769,129 @@ function ReportPrintModal({
           <p>{brand.tagline}</p>
           <p>{brand.location}</p>
           <hr />
-          <h3>Business Report</h3>
+          <h3>{title}</h3>
           <p>Period: {summary.periodLabel}</p>
           <p>Generated: {generatedAt}</p>
           <hr />
-          <div className="report-lines">
-            <span><strong>Total sales amount</strong><em>{formatGhs(summary.salesAmount)}</em></span>
-            <span><strong>Remaining inventory value</strong><em>{formatGhs(summary.remainingInventoryValue)}</em></span>
-            <span><strong>Total inventory value</strong><em>{formatGhs(summary.inventoryValue)}</em></span>
-            <span><strong>Discounts given</strong><em>{formatGhs(summary.discountAmount)}</em></span>
-            <span><strong>Expenses</strong><em>{formatGhs(summary.expensesTotal)}</em></span>
-            <span><strong>Open customer balances</strong><em>{formatGhs(summary.openBalances)}</em></span>
-            <span><strong>Sales count</strong><em>{summary.salesCount}</em></span>
-            <span><strong>Low stock items</strong><em>{summary.lowStockCount}</em></span>
-            <span><strong>Top inventory category</strong><em>{summary.topCategory}</em></span>
-          </div>
+          {summary.kind === "business" ? (
+            <div className="report-lines">
+              <span><strong>Total sales amount</strong><em>{formatGhs(summary.salesAmount)}</em></span>
+              <span><strong>Remaining inventory value</strong><em>{formatGhs(summary.remainingInventoryValue)}</em></span>
+              <span><strong>Total inventory value</strong><em>{formatGhs(summary.inventoryValue)}</em></span>
+              <span><strong>Discounts given</strong><em>{formatGhs(summary.discountAmount)}</em></span>
+              <span><strong>Expenses</strong><em>{formatGhs(summary.expensesTotal)}</em></span>
+              <span><strong>Open customer balances</strong><em>{formatGhs(summary.openBalances)}</em></span>
+              <span><strong>Sales count</strong><em>{summary.salesCount}</em></span>
+              <span><strong>Low stock items</strong><em>{summary.lowStockCount}</em></span>
+              <span><strong>Top inventory category</strong><em>{summary.topCategory}</em></span>
+            </div>
+          ) : null}
+
+          {summary.kind === "sales" ? (
+            <>
+              <div className="report-lines">
+                <span><strong>Total sales amount</strong><em>{formatGhs(summary.salesAmount)}</em></span>
+                <span><strong>Sales count</strong><em>{summary.salesCount}</em></span>
+                <span><strong>Discounts given</strong><em>{formatGhs(summary.discountAmount)}</em></span>
+              </div>
+              <ReportTable
+                headers={["Ref", "Customer", "Staff", "Total", "Paid"]}
+                rows={summary.sales.map((sale) => [
+                  sale.ref,
+                  sale.customer,
+                  sale.staff,
+                  formatGhs(saleTotal(sale)),
+                  formatGhs(sale.paid)
+                ])}
+              />
+            </>
+          ) : null}
+
+          {summary.kind === "low-stock" ? (
+            <>
+              <div className="report-lines">
+                <span><strong>Low stock items</strong><em>{summary.lowStockCount}</em></span>
+                <span><strong>Top inventory category</strong><em>{summary.topCategory}</em></span>
+              </div>
+              <ReportTable
+                headers={["Item", "Category", "Stock", "Threshold"]}
+                rows={summary.lowStockItems.map((item) => [
+                  item.name,
+                  item.category,
+                  `${item.stock} ${item.unit}`,
+                  `${item.threshold} ${item.unit}`
+                ])}
+              />
+            </>
+          ) : null}
+
+          {summary.kind === "expenses" ? (
+            <>
+              <div className="report-lines">
+                <span><strong>Total expenses</strong><em>{formatGhs(summary.expensesTotal)}</em></span>
+                <span><strong>Expense entries</strong><em>{summary.expenses.length}</em></span>
+              </div>
+              <ReportTable
+                headers={["Date", "Category", "Method", "Amount"]}
+                rows={summary.expenses.map((expense) => [
+                  expense.date,
+                  expense.category,
+                  expense.method,
+                  formatGhs(expense.amount)
+                ])}
+              />
+            </>
+          ) : null}
+
+          {summary.kind === "staff" ? (
+            <>
+              <div className="report-lines">
+                <span><strong>Active staff</strong><em>{summary.staffActivity.filter((staff) => staff.active).length}</em></span>
+                <span><strong>Sales count</strong><em>{summary.salesCount}</em></span>
+              </div>
+              <ReportTable
+                headers={["Staff", "Role", "Sales", "Amount"]}
+                rows={summary.staffActivity.map((staff) => [
+                  staff.name,
+                  staff.role,
+                  String(staff.salesCount),
+                  formatGhs(staff.salesAmount)
+                ])}
+              />
+            </>
+          ) : null}
           <hr />
           <p>Prepared for management review.</p>
         </div>
       </div>
     </div>
+  );
+}
+
+function ReportTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
+  if (!rows.length) {
+    return <p>No records found for this period.</p>;
+  }
+
+  return (
+    <table className="report-table">
+      <thead>
+        <tr>
+          {headers.map((header) => (
+            <th key={header}>{header}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, index) => (
+          <tr key={`${row.join("-")}-${index}`}>
+            {row.map((cell, cellIndex) => (
+              <td key={`${cell}-${cellIndex}`}>{cell}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

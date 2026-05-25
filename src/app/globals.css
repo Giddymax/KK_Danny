@@ -968,6 +968,26 @@ th {
   text-align: right;
 }
 
+.report-table {
+  width: 100%;
+  margin-top: 14px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.report-table th,
+.report-table td {
+  border: 1px solid #bbb;
+  padding: 6px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.report-table th {
+  background: #f1f1f1;
+  font-weight: 850;
+}
+
 .receipt-logo {
   display: block;
   width: 120px;
