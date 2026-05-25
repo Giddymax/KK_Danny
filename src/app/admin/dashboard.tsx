@@ -641,6 +641,17 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
   }, [isDemo, userEmail, userName]);
 
   function addToCart(item: InventoryItem) {
+    if (!item.isService && item.stock <= 0) {
+      setManagedStatus(`${item.name} is out of stock.`);
+      return;
+    }
+
+    if (!item.isService) {
+      setInventoryItems((current) =>
+        current.map((entry) => (entry.id === item.id ? { ...entry, stock: Math.max(entry.stock - 1, 0) } : entry))
+      );
+    }
+
     setCart((current) => {
       const existing = current.find((line) => line.id === item.id);
       if (existing) {
@@ -650,6 +661,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
       }
       return [...current, { id: item.id, name: item.name, quantity: 1, price: item.price }];
     });
+    setManagedStatus("");
   }
 
   function openInventoryForm(item?: InventoryItem) {
@@ -1195,23 +1207,63 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
   }
 
   function updateQuantityInput(id: string, value: string) {
+    const line = cart.find((entry) => entry.id === id);
+
+    if (!line) {
+      return;
+    }
+
+    const inventoryItem = inventoryItems.find((entry) => entry.id === id);
+    const desiredQuantity = value === "" ? 0 : Math.max(Number(value), 0);
+    const safeDesiredQuantity = Number.isFinite(desiredQuantity) ? desiredQuantity : line.quantity;
+    const availableQuantity = inventoryItem && !inventoryItem.isService
+      ? inventoryItem.stock + line.quantity
+      : safeDesiredQuantity;
+    const nextQuantity = inventoryItem && !inventoryItem.isService
+      ? Math.min(safeDesiredQuantity, availableQuantity)
+      : safeDesiredQuantity;
+    const stockDelta = line.quantity - nextQuantity;
+
+    if (inventoryItem && !inventoryItem.isService && stockDelta !== 0) {
+      setInventoryItems((current) =>
+        current.map((item) => (item.id === id ? { ...item, stock: Math.max(item.stock + stockDelta, 0) } : item))
+      );
+    }
+
     setCart((current) =>
-      current.map((line) => (line.id === id ? { ...line, quantity: value === "" ? 0 : Number(value) } : line))
+      current.map((entry) => (entry.id === id ? { ...entry, quantity: nextQuantity } : entry))
     );
+
+    if (inventoryItem && !inventoryItem.isService && safeDesiredQuantity > availableQuantity) {
+      setManagedStatus(`Only ${availableQuantity} ${inventoryItem.unit}${availableQuantity === 1 ? "" : "s"} available for ${inventoryItem.name}.`);
+    } else {
+      setManagedStatus("");
+    }
   }
 
   function normalizeQuantity(id: string) {
-    setCart((current) =>
-      current.map((line) =>
-        line.id === id && (!Number.isFinite(line.quantity) || line.quantity < 1)
-          ? { ...line, quantity: 1 }
-          : line
-      )
-    );
+    const line = cart.find((entry) => entry.id === id);
+
+    if (!line || line.quantity >= 1) {
+      return;
+    }
+
+    updateQuantityInput(id, "1");
   }
 
   function clearCart() {
+    for (const line of cart) {
+      const inventoryItem = inventoryItems.find((item) => item.id === line.id);
+
+      if (inventoryItem && !inventoryItem.isService) {
+        setInventoryItems((current) =>
+          current.map((item) => (item.id === line.id ? { ...item, stock: item.stock + line.quantity } : item))
+        );
+      }
+    }
+
     setCart([]);
+    setManagedStatus("");
   }
 
   async function updateInventoryStock(itemId: string, nextStock: number) {
@@ -1335,7 +1387,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
         const inventoryItem = inventoryItems.find((entry) => entry.id === item.id);
 
         if (inventoryItem && !inventoryItem.isService) {
-          await updateInventoryStock(inventoryItem.id, inventoryItem.stock - item.quantity);
+          await updateInventoryStock(inventoryItem.id, inventoryItem.stock);
         }
       }
     } catch (error) {
