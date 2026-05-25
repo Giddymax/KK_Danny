@@ -2345,7 +2345,7 @@ function CustomersPanel({
   );
 }
 
-type ReportPeriod = "today" | "this-month" | "last-30" | "all";
+type ReportPeriod = "today" | "yesterday" | "this-month" | "last-30" | "all";
 
 function isWithinReportPeriod(dateValue: string, period: ReportPeriod) {
   if (period === "all") {
@@ -2364,6 +2364,12 @@ function isWithinReportPeriod(dateValue: string, period: ReportPeriod) {
     return date.toDateString() === now.toDateString();
   }
 
+  if (period === "yesterday") {
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    return date.toDateString() === yesterday.toDateString();
+  }
+
   if (period === "this-month") {
     return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
   }
@@ -2372,6 +2378,18 @@ function isWithinReportPeriod(dateValue: string, period: ReportPeriod) {
   start.setDate(now.getDate() - 30);
   start.setHours(0, 0, 0, 0);
   return date >= start && date <= now;
+}
+
+function reportPeriodLabel(period: ReportPeriod) {
+  const labels: Record<ReportPeriod, string> = {
+    today: "Today",
+    yesterday: "Yesterday",
+    "this-month": "This month",
+    "last-30": "Last 30 days",
+    all: "All time"
+  };
+
+  return labels[period];
 }
 
 function ReportsPanel({
@@ -2386,6 +2404,7 @@ function ReportsPanel({
   customerRecords: CustomerRecord[];
 }) {
   const [period, setPeriod] = useState<ReportPeriod>("this-month");
+  const [reportOpen, setReportOpen] = useState(false);
   const inventoryValue = inventoryItems
     .filter((item) => !item.isService)
     .reduce((sum, item) => sum + item.price * item.stock, 0);
@@ -2394,7 +2413,7 @@ function ReportsPanel({
   const filteredExpenses = expenseRecords.filter((expense) => isWithinReportPeriod(expense.date, period));
   const salesAmount = filteredSales.reduce((sum, sale) => sum + saleTotal(sale), 0);
   const discountAmount = filteredSales.reduce((sum, sale) => sum + sale.discount, 0);
-  const actualRevenue = salesAmount - inventoryValue;
+  const remainingInventoryValue = inventoryValue;
   const expensesTotal = filteredExpenses
     .reduce((sum, expense) => sum + expense.amount, 0);
 
@@ -2411,21 +2430,38 @@ function ReportsPanel({
   })();
 
   const openBalances = customerRecords.reduce((sum, c) => sum + c.balance, 0);
+  const reportSummary = {
+    periodLabel: reportPeriodLabel(period),
+    inventoryValue,
+    salesAmount,
+    remainingInventoryValue,
+    discountAmount,
+    expensesTotal,
+    openBalances,
+    topCategory,
+    salesCount: filteredSales.length,
+    lowStockCount: inventoryItems.filter((item) => !item.isService && item.stock <= item.threshold).length
+  };
 
   return (
-    <section className="dashboard-grid">
-      <div className="panel wide-panel">
+    <>
+      <section className="dashboard-grid">
+        <div className="panel wide-panel">
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Analysis period</p>
             <h2>Report filter</h2>
           </div>
+          <button type="button" className="small-action" onClick={() => setReportOpen(true)}>
+            <Printer size={15} /> Print report
+          </button>
         </div>
         <div className="form-grid">
           <label>
             <span>Time period</span>
             <select value={period} onChange={(event) => setPeriod(event.target.value as ReportPeriod)}>
               <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
               <option value="this-month">This month</option>
               <option value="last-30">Last 30 days</option>
               <option value="all">All time</option>
@@ -2435,7 +2471,7 @@ function ReportsPanel({
       </div>
       <MetricCard icon={BadgeDollarSign} label="Inventory value" value={inventoryValue > 0 ? formatGhs(inventoryValue) : "—"} tone="green" />
       <MetricCard icon={ReceiptText} label="Sales amount" value={salesAmount > 0 ? formatGhs(salesAmount) : "—"} tone="gold" />
-      <MetricCard icon={BadgeDollarSign} label="Actual revenue" value={formatGhs(actualRevenue)} tone={actualRevenue >= 0 ? "green" : "red"} />
+      <MetricCard icon={BadgeDollarSign} label="Remaining inventory value" value={formatGhs(remainingInventoryValue)} tone="green" />
       <MetricCard icon={CreditCard} label="Discounts" value={discountAmount > 0 ? formatGhs(discountAmount) : "—"} tone="blue" />
       <MetricCard icon={CreditCard} label="Expenses" value={expensesTotal > 0 ? formatGhs(expensesTotal) : "—"} tone="red" />
       <MetricCard icon={Boxes} label="Top category" value={topCategory} tone="gold" />
@@ -2454,7 +2490,9 @@ function ReportsPanel({
           <button type="button"><Users size={18} /> Staff activity</button>
         </div>
       </div>
-    </section>
+      </section>
+      {reportOpen ? <ReportPrintModal summary={reportSummary} onClose={() => setReportOpen(false)} /> : null}
+    </>
   );
 }
 
@@ -2647,6 +2685,70 @@ function ManagedEditor({
           </button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function ReportPrintModal({
+  summary,
+  onClose
+}: {
+  summary: {
+    periodLabel: string;
+    inventoryValue: number;
+    salesAmount: number;
+    remainingInventoryValue: number;
+    discountAmount: number;
+    expensesTotal: number;
+    openBalances: number;
+    topCategory: string;
+    salesCount: number;
+    lowStockCount: number;
+  };
+  onClose: () => void;
+}) {
+  const generatedAt = new Date().toLocaleString("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  });
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Business report preview">
+      <div className="report-modal">
+        <div className="modal-actions">
+          <button type="button" className="small-action" onClick={() => window.print()}>
+            <Printer size={15} /> Print
+          </button>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close report" title="Close report">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="report-print-area">
+          <Image src={brand.logo} alt={`${brand.name} logo`} width={120} height={74} className="receipt-logo" />
+          <h2>{brand.name}</h2>
+          <p>{brand.tagline}</p>
+          <p>{brand.location}</p>
+          <hr />
+          <h3>Vital Business Report</h3>
+          <p>Period: {summary.periodLabel}</p>
+          <p>Generated: {generatedAt}</p>
+          <hr />
+          <div className="report-lines">
+            <span><strong>Total sales amount</strong><em>{formatGhs(summary.salesAmount)}</em></span>
+            <span><strong>Remaining inventory value</strong><em>{formatGhs(summary.remainingInventoryValue)}</em></span>
+            <span><strong>Total inventory value</strong><em>{formatGhs(summary.inventoryValue)}</em></span>
+            <span><strong>Discounts given</strong><em>{formatGhs(summary.discountAmount)}</em></span>
+            <span><strong>Expenses</strong><em>{formatGhs(summary.expensesTotal)}</em></span>
+            <span><strong>Open customer balances</strong><em>{formatGhs(summary.openBalances)}</em></span>
+            <span><strong>Sales count</strong><em>{summary.salesCount}</em></span>
+            <span><strong>Low stock items</strong><em>{summary.lowStockCount}</em></span>
+            <span><strong>Top inventory category</strong><em>{summary.topCategory}</em></span>
+          </div>
+          <hr />
+          <p>Prepared for management review.</p>
+        </div>
+      </div>
     </div>
   );
 }

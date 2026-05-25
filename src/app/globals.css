@@ -870,6 +870,15 @@ th {
   background: white;
 }
 
+.report-modal {
+  width: min(640px, 100%);
+  max-height: min(820px, 92svh);
+  overflow: auto;
+  padding: 16px;
+  border-radius: var(--radius);
+  background: white;
+}
+
 .inventory-modal {
   width: min(720px, 100%);
   max-height: min(760px, 92svh);
@@ -910,6 +919,53 @@ th {
   font-family: "Consolas", "Courier New", monospace;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.report-print-area {
+  width: min(560px, 100%);
+  margin: 0 auto;
+  padding: 20px;
+  color: #111;
+  background: white;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.report-print-area h2,
+.report-print-area h3,
+.report-print-area p {
+  margin: 4px 0;
+  text-align: center;
+}
+
+.report-print-area h3 {
+  margin-top: 12px;
+}
+
+.report-print-area hr {
+  border: 0;
+  border-top: 1px solid #111;
+  margin: 14px 0;
+}
+
+.report-lines {
+  display: grid;
+  gap: 8px;
+}
+
+.report-lines span {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 6px;
+}
+
+.report-lines em {
+  flex: 0 0 auto;
+  font-style: normal;
+  font-weight: 850;
+  text-align: right;
 }
 
 .receipt-logo {
@@ -1160,16 +1216,27 @@ th {
   }
 
   .receipt-print-area,
-  .receipt-print-area * {
+  .receipt-print-area *,
+  .report-print-area,
+  .report-print-area * {
     visibility: visible !important;
   }
 
-  .receipt-print-area {
+  .receipt-print-area,
+  .report-print-area {
     position: absolute;
     inset: 0 auto auto 0;
+    box-shadow: none;
+  }
+
+  .receipt-print-area {
     width: 80mm;
     padding: 4mm;
-    box-shadow: none;
+  }
+
+  .report-print-area {
+    width: 190mm;
+    padding: 10mm;
   }
 
   @page {
