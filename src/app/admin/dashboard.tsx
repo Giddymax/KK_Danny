@@ -2413,7 +2413,7 @@ function ReportsPanel({
   const filteredExpenses = expenseRecords.filter((expense) => isWithinReportPeriod(expense.date, period));
   const salesAmount = filteredSales.reduce((sum, sale) => sum + saleTotal(sale), 0);
   const discountAmount = filteredSales.reduce((sum, sale) => sum + sale.discount, 0);
-  const remainingInventoryValue = inventoryValue;
+  const remainingInventoryValue = inventoryValue - salesAmount;
   const expensesTotal = filteredExpenses
     .reduce((sum, expense) => sum + expense.amount, 0);
 
