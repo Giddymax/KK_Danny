@@ -2730,7 +2730,7 @@ function ReportPrintModal({
           <p>{brand.tagline}</p>
           <p>{brand.location}</p>
           <hr />
-          <h3>Vital Business Report</h3>
+          <h3>Business Report</h3>
           <p>Period: {summary.periodLabel}</p>
           <p>Generated: {generatedAt}</p>
           <hr />
