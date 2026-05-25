@@ -43,6 +43,7 @@ import {
 
 type AdminDashboardProps = {
   userEmail: string;
+  userName: string;
   isDemo: boolean;
 };
 
@@ -266,6 +267,10 @@ function titleCaseStatus(value: string) {
     .join(" ");
 }
 
+function isLegacyReceiptCopyNote(value: string | null | undefined) {
+  return value?.trim().toLowerCase() === ["customer", "copy"].join(" ");
+}
+
 function saleToFields(sale?: Sale): ManagedField[] {
   return [
     { name: "customer", label: "Customer", value: sale?.customer ?? "Walk-in" },
@@ -350,7 +355,7 @@ function settingsToFields(settings: SettingsRecord): ManagedField[] {
   ];
 }
 
-export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
+export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardProps) {
   const [active, setActive] = useState<(typeof navItems)[number]["key"]>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -578,7 +583,7 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
               timeStyle: "short"
             }),
             method: row.payment_method,
-            staff: userEmail,
+            staff: row.notes && !isLegacyReceiptCopyNote(row.notes) ? row.notes : userName,
             status: row.status === "part_paid" ? "Part paid" : row.status === "overpaid" ? "Overpaid" : "Paid",
             items: [],
             discount: Number(row.discount),
@@ -623,7 +628,7 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
     return () => {
       ignore = true;
     };
-  }, [isDemo, userEmail]);
+  }, [isDemo, userEmail, userName]);
 
   function addToCart(item: InventoryItem) {
     setCart((current) => {
@@ -851,7 +856,7 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
           phone: fieldValue(fields, "phone"),
           date: new Date().toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" }),
           method: fieldValue(fields, "method") || "Cash",
-          staff: userEmail,
+          staff: userName,
           status: fieldValue(fields, "status") as Sale["status"],
           items: managedEditor.itemId ? salesRecords.find((entry) => entry.ref === managedEditor.itemId)?.items ?? [] : [],
           discount: toNumber(fieldValue(fields, "discount")),
@@ -1194,13 +1199,13 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
         timeStyle: "short"
       }),
       method: paymentMethod,
-      staff: userEmail,
+      staff: userName,
       status: statusFor(total, amountPaid),
       items: cart,
       discount,
       paid: amountPaid,
       total,
-      notes: "Customer copy"
+      notes: ""
     };
 
     if (!isDemo) {
@@ -1223,7 +1228,7 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
           amount_paid: sale.paid,
           payment_method: sale.method,
           status: sale.status === "Part paid" ? "part_paid" : sale.status.toLowerCase(),
-          notes: sale.notes,
+          notes: sale.staff,
           active: true
         })
         .select("id")
@@ -1843,6 +1848,7 @@ function ResponsiveSalesTable({
           <tr>
             <th>Ref</th>
             <th>Customer</th>
+            <th>Staff</th>
             <th>Method</th>
             <th>Status</th>
             <th>Total</th>
@@ -1855,6 +1861,7 @@ function ResponsiveSalesTable({
             <tr key={sale.ref}>
               <td data-label="Ref">{sale.ref}</td>
               <td data-label="Customer">{sale.customer}</td>
+              <td data-label="Staff">{sale.staff}</td>
               <td data-label="Method">{sale.method}</td>
               <td data-label="Status">
                 <span className={`status ${sale.status.toLowerCase().replace(" ", "-")}`}>
@@ -2480,7 +2487,6 @@ function ReceiptModal({ sale, onClose }: { sale: Sale; onClose: () => void }) {
           {sale.phone ? <p>Tel: {sale.phone}</p> : null}
           <p>Pay: {sale.method}</p>
           <p>Serv: {sale.staff}</p>
-          {sale.notes ? <p>Note: {sale.notes}</p> : null}
           <hr />
           <div className="receipt-row receipt-head">
             <span>ITEM</span>
@@ -2509,7 +2515,6 @@ function ReceiptModal({ sale, onClose }: { sale: Sale; onClose: () => void }) {
           </div>
           <hr />
           <p>Thank you for your patronage!</p>
-          <strong>*** CUSTOMER COPY ***</strong>
         </div>
       </div>
     </div>
