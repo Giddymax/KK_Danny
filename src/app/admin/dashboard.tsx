@@ -256,6 +256,10 @@ function moneyInputToNumber(value: string) {
   return Number.isFinite(parsed) ? Math.max(parsed, 0) : 0;
 }
 
+function sameItemName(left: string, right: string) {
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
 function makeDemoId(prefix: string) {
   return `${prefix}-${Date.now()}`;
 }
@@ -451,6 +455,12 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
     const d = parseSaleDate(sale.date);
     return d !== null && d.toDateString() === today.toDateString();
   }).length;
+  const todayDiscount = salesRecords
+    .filter((sale) => {
+      const d = parseSaleDate(sale.date);
+      return d !== null && d.toDateString() === today.toDateString();
+    })
+    .reduce((sum, sale) => sum + sale.discount, 0);
   const pendingQuotesCount = quoteRecords.filter((q) => q.status === "New").length;
   const activeLabel = navItems.find((item) => item.key === active)?.label ?? "Dashboard";
 
@@ -916,6 +926,9 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
       }
 
       if (managedEditor.kind === "purchase") {
+        const previousPurchase = managedEditor.itemId
+          ? purchaseRecords.find((entry) => entry.id === managedEditor.itemId)
+          : undefined;
         const purchase: PurchaseRecord = {
           id: managedEditor.itemId ?? makeDemoId("purchase"),
           name: fieldValue(fields, "name"),
@@ -942,6 +955,18 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
           if (error) throw error;
           purchase.id = data?.id ?? purchase.id;
         }
+
+        if (previousPurchase) {
+          if (sameItemName(previousPurchase.name, purchase.name)) {
+            await adjustInventoryByItemName(purchase.name, purchase.quantity - previousPurchase.quantity);
+          } else {
+            await adjustInventoryByItemName(previousPurchase.name, -previousPurchase.quantity);
+            await adjustInventoryByItemName(purchase.name, purchase.quantity);
+          }
+        } else {
+          await adjustInventoryByItemName(purchase.name, purchase.quantity);
+        }
+
         setPurchaseRecords((current) =>
           managedEditor.itemId ? current.map((entry) => (entry.id === managedEditor.itemId ? purchase : entry)) : [purchase, ...current]
         );
@@ -1143,7 +1168,13 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
 
       if (kind === "sale") setSalesRecords((current) => current.filter((entry) => entry.ref !== itemId));
       if (kind === "supplier") setSupplierRecords((current) => current.filter((entry) => entry.id !== itemId));
-      if (kind === "purchase") setPurchaseRecords((current) => current.filter((entry) => entry.id !== itemId));
+      if (kind === "purchase") {
+        const purchase = purchaseRecords.find((entry) => entry.id === itemId);
+        if (purchase) {
+          await adjustInventoryByItemName(purchase.name, -purchase.quantity);
+        }
+        setPurchaseRecords((current) => current.filter((entry) => entry.id !== itemId));
+      }
       if (kind === "expense") setExpenseRecords((current) => current.filter((entry) => entry.id !== itemId));
       if (kind === "quote") setQuoteRecords((current) => current.filter((entry) => entry.id !== itemId));
       if (kind === "customer") setCustomerRecords((current) => current.filter((entry) => entry.id !== itemId));
@@ -1181,6 +1212,45 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
 
   function clearCart() {
     setCart([]);
+  }
+
+  async function updateInventoryStock(itemId: string, nextStock: number) {
+    setInventoryItems((current) =>
+      current.map((item) => (item.id === itemId ? { ...item, stock: Math.max(nextStock, 0) } : item))
+    );
+
+    if (isDemo) {
+      return;
+    }
+
+    const supabase = createBrowserSupabaseClient();
+
+    if (!supabase) {
+      throw new Error("Supabase keys are not set.");
+    }
+
+    const { error } = await supabase
+      .from("inventory_items")
+      .update({ stock: Math.max(nextStock, 0) })
+      .eq("id", itemId);
+
+    if (error) {
+      throw error;
+    }
+  }
+
+  async function adjustInventoryByItemName(itemName: string, quantityDelta: number) {
+    if (!itemName.trim() || quantityDelta === 0) {
+      return;
+    }
+
+    const item = inventoryItems.find((entry) => sameItemName(entry.name, itemName));
+
+    if (!item || item.isService) {
+      return;
+    }
+
+    await updateInventoryStock(item.id, item.stock + quantityDelta);
   }
 
   async function createReceipt() {
@@ -1258,12 +1328,26 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
       }
     }
 
+    let inventoryWarning = "";
+
+    try {
+      for (const item of sale.items) {
+        const inventoryItem = inventoryItems.find((entry) => entry.id === item.id);
+
+        if (inventoryItem && !inventoryItem.isService) {
+          await updateInventoryStock(inventoryItem.id, inventoryItem.stock - item.quantity);
+        }
+      }
+    } catch (error) {
+      inventoryWarning = error instanceof Error ? error.message : "Sale saved, but inventory stock could not be updated.";
+    }
+
     setSalesRecords((current) => [sale, ...current]);
     setReceipt(sale);
     setCart([]);
     setDiscountInput("0");
     setAmountPaidInput("0");
-    setManagedStatus(isDemo ? "Demo sale saved to sales history." : "Sale saved to sales history.");
+    setManagedStatus(inventoryWarning || (isDemo ? "Demo sale saved to sales history." : "Sale saved to sales history."));
   }
 
   function openSaleReceipt(sale: Sale) {
@@ -1389,6 +1473,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
             lowStockCount={lowStock.length}
             sales={salesRecords}
             todaySalesCount={todaySalesCount}
+            todayDiscount={todayDiscount}
             pendingQuotesCount={pendingQuotesCount}
             onNewSale={() => setActive("pos")}
             onAddStock={() => {
@@ -1493,6 +1578,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
         {active === "reports" ? (
           <ReportsPanel
             inventoryItems={inventoryItems}
+            salesRecords={salesRecords}
             expenseRecords={expenseRecords}
             customerRecords={customerRecords}
           />
@@ -1537,6 +1623,7 @@ function DashboardOverview({
   lowStockCount,
   sales,
   todaySalesCount,
+  todayDiscount,
   pendingQuotesCount,
   onNewSale,
   onAddStock,
@@ -1547,6 +1634,7 @@ function DashboardOverview({
   lowStockCount: number;
   sales: Sale[];
   todaySalesCount: number;
+  todayDiscount: number;
   pendingQuotesCount: number;
   onNewSale: () => void;
   onAddStock: () => void;
@@ -1560,6 +1648,7 @@ function DashboardOverview({
     <section className="dashboard-grid">
       <MetricCard icon={BadgeDollarSign} label="Revenue today" value={formatGhs(revenue)} tone="green" />
       <MetricCard icon={ReceiptText} label="Sales today" value={`${todaySalesCount} receipt${todaySalesCount !== 1 ? "s" : ""}`} tone="gold" />
+      <MetricCard icon={CreditCard} label="Discount today" value={todayDiscount > 0 ? formatGhs(todayDiscount) : "—"} tone="blue" />
       <MetricCard icon={ClipboardList} label="Pending quotes" value={`${pendingQuotesCount} open`} tone="blue" />
       <MetricCard icon={Boxes} label="Low stock" value={`${lowStockCount} items`} tone="red" />
 
@@ -2204,25 +2293,57 @@ function CustomersPanel({
   );
 }
 
+type ReportPeriod = "today" | "this-month" | "last-30" | "all";
+
+function isWithinReportPeriod(dateValue: string, period: ReportPeriod) {
+  if (period === "all") {
+    return true;
+  }
+
+  const date = parseSaleDate(dateValue) ?? new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+
+  const now = new Date();
+
+  if (period === "today") {
+    return date.toDateString() === now.toDateString();
+  }
+
+  if (period === "this-month") {
+    return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+  }
+
+  const start = new Date(now);
+  start.setDate(now.getDate() - 30);
+  start.setHours(0, 0, 0, 0);
+  return date >= start && date <= now;
+}
+
 function ReportsPanel({
   inventoryItems,
+  salesRecords,
   expenseRecords,
   customerRecords
 }: {
   inventoryItems: InventoryItem[];
+  salesRecords: Sale[];
   expenseRecords: ExpenseRecord[];
   customerRecords: CustomerRecord[];
 }) {
+  const [period, setPeriod] = useState<ReportPeriod>("this-month");
   const inventoryValue = inventoryItems
     .filter((item) => !item.isService)
     .reduce((sum, item) => sum + item.price * item.stock, 0);
 
-  const now = new Date();
-  const expensesThisMonth = expenseRecords
-    .filter((expense) => {
-      const d = new Date(expense.date);
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-    })
+  const filteredSales = salesRecords.filter((sale) => isWithinReportPeriod(sale.date, period));
+  const filteredExpenses = expenseRecords.filter((expense) => isWithinReportPeriod(expense.date, period));
+  const salesAmount = filteredSales.reduce((sum, sale) => sum + saleTotal(sale), 0);
+  const discountAmount = filteredSales.reduce((sum, sale) => sum + sale.discount, 0);
+  const actualRevenue = salesAmount - inventoryValue;
+  const expensesTotal = filteredExpenses
     .reduce((sum, expense) => sum + expense.amount, 0);
 
   const topCategory = (() => {
@@ -2241,8 +2362,30 @@ function ReportsPanel({
 
   return (
     <section className="dashboard-grid">
+      <div className="panel wide-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Analysis period</p>
+            <h2>Report filter</h2>
+          </div>
+        </div>
+        <div className="form-grid">
+          <label>
+            <span>Time period</span>
+            <select value={period} onChange={(event) => setPeriod(event.target.value as ReportPeriod)}>
+              <option value="today">Today</option>
+              <option value="this-month">This month</option>
+              <option value="last-30">Last 30 days</option>
+              <option value="all">All time</option>
+            </select>
+          </label>
+        </div>
+      </div>
       <MetricCard icon={BadgeDollarSign} label="Inventory value" value={inventoryValue > 0 ? formatGhs(inventoryValue) : "—"} tone="green" />
-      <MetricCard icon={CreditCard} label="Expenses this month" value={expensesThisMonth > 0 ? formatGhs(expensesThisMonth) : "—"} tone="red" />
+      <MetricCard icon={ReceiptText} label="Sales amount" value={salesAmount > 0 ? formatGhs(salesAmount) : "—"} tone="gold" />
+      <MetricCard icon={BadgeDollarSign} label="Actual revenue" value={formatGhs(actualRevenue)} tone={actualRevenue >= 0 ? "green" : "red"} />
+      <MetricCard icon={CreditCard} label="Discounts" value={discountAmount > 0 ? formatGhs(discountAmount) : "—"} tone="blue" />
+      <MetricCard icon={CreditCard} label="Expenses" value={expensesTotal > 0 ? formatGhs(expensesTotal) : "—"} tone="red" />
       <MetricCard icon={Boxes} label="Top category" value={topCategory} tone="gold" />
       <MetricCard icon={ClipboardList} label="Open balances" value={openBalances > 0 ? formatGhs(openBalances) : "—"} tone="blue" />
       <div className="panel wide-panel">
