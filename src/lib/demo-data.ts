@@ -28,6 +28,7 @@ export type Sale = {
   items: SaleItem[];
   discount: number;
   paid: number;
+  total?: number;
   notes?: string;
 };
 

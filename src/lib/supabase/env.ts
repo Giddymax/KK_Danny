@@ -14,3 +14,14 @@ export function getSupabaseConfig() {
 export function hasSupabaseEnv() {
   return Boolean(getSupabaseConfig());
 }
+
+export function getSupabaseAdminConfig() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY;
+
+  if (!url || !key) {
+    return null;
+  }
+
+  return { url, key };
+}

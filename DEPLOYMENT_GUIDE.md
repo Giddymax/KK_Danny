@@ -116,12 +116,14 @@ In Supabase:
 2. Open **API**.
 3. Copy the **Project URL**.
 4. Copy the **Publishable key**.
+5. Copy the **Service role key**. Keep this key private and only use it as a server-side environment variable.
 
 Use these names in the app:
 
 ```text
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
 
 Do not use the Supabase secret key or service role key in `NEXT_PUBLIC_` variables.
@@ -135,6 +137,7 @@ Add your values:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
 
 Restart the local server:
@@ -183,11 +186,12 @@ Do not upload `.env.local`.
 5. Vercel should detect **Next.js** automatically.
 6. Keep the root directory as the project root.
 7. Open the **Environment Variables** section.
-8. Add these two variables:
+8. Add these three variables:
 
 ```text
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+SUPABASE_SERVICE_ROLE_KEY
 ```
 
 9. Paste the same values you used in `.env.local`.
@@ -342,4 +346,3 @@ node tools\verify-responsive.mjs
 - Vercel environment variables: https://vercel.com/docs/environment-variables
 - Supabase getting started: https://supabase.com/docs/guides/getting-started
 - Supabase dashboard: https://supabase.com/dashboard
-

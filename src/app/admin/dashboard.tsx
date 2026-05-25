@@ -85,7 +85,7 @@ type ManagedField = {
   name: string;
   label: string;
   value: string;
-  type?: "text" | "number" | "date" | "select";
+  type?: "text" | "number" | "date" | "select" | "password";
   options?: string[];
 };
 
@@ -173,6 +173,10 @@ const navItems = [
 ] as const;
 
 function saleTotal(sale: Sale) {
+  if (typeof sale.total === "number") {
+    return sale.total;
+  }
+
   return sale.items.reduce((sum, item) => sum + item.price * item.quantity, 0) - sale.discount;
 }
 
@@ -240,6 +244,15 @@ function fieldValue(fields: ManagedField[], name: string) {
 function toNumber(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function moneyInputToNumber(value: string) {
+  if (value.trim() === "") {
+    return 0;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(parsed, 0) : 0;
 }
 
 function makeDemoId(prefix: string) {
@@ -317,9 +330,12 @@ function customerToFields(customer?: CustomerRecord): ManagedField[] {
 }
 
 function staffToFields(staff?: StaffRecord): ManagedField[] {
+  const isEditing = Boolean(staff);
+
   return [
     { name: "name", label: "Full name", value: staff?.name ?? "" },
     { name: "email", label: "Email", value: staff?.email ?? "" },
+    { name: "password", label: isEditing ? "New password" : "Password", value: "", type: "password" },
     { name: "role", label: "Role", value: staff?.role ?? "staff", type: "select", options: ["admin", "staff"] },
     { name: "active", label: "Status", value: staff?.active === false ? "Inactive" : "Active", type: "select", options: ["Active", "Inactive"] }
   ];
@@ -340,8 +356,8 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customer, setCustomer] = useState("Walk-in");
   const [phone, setPhone] = useState("");
-  const [discount, setDiscount] = useState(0);
-  const [amountPaid, setAmountPaid] = useState(0);
+  const [discountInput, setDiscountInput] = useState("0");
+  const [amountPaidInput, setAmountPaidInput] = useState("0");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [receipt, setReceipt] = useState<Sale | null>(null);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(isDemo ? inventory : []);
@@ -415,6 +431,8 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
     () => cart.reduce((sum, item) => sum + item.quantity * item.price, 0),
     [cart]
   );
+  const discount = moneyInputToNumber(discountInput);
+  const amountPaid = moneyInputToNumber(amountPaidInput);
   const total = Math.max(subtotal - discount, 0);
   const lowStock = inventoryItems.filter((item) => !item.isService && item.stock <= item.threshold);
   const today = new Date();
@@ -565,6 +583,7 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
             items: [],
             discount: Number(row.discount),
             paid: Number(row.amount_paid),
+            total: Number(row.total),
             notes: row.notes ?? ""
           }))
         );
@@ -837,6 +856,9 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
           items: managedEditor.itemId ? salesRecords.find((entry) => entry.ref === managedEditor.itemId)?.items ?? [] : [],
           discount: toNumber(fieldValue(fields, "discount")),
           paid: toNumber(fieldValue(fields, "paid")),
+          total: managedEditor.itemId
+            ? salesRecords.find((entry) => entry.ref === managedEditor.itemId)?.total
+            : toNumber(fieldValue(fields, "paid")),
           notes: fieldValue(fields, "notes")
         };
 
@@ -1018,15 +1040,25 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
           active: activeValue
         };
         if (supabase) {
-          if (!managedEditor.itemId) {
-            throw new Error("Create the staff login in Supabase Authentication first, then edit the profile here.");
+          const response = await fetch("/api/admin/staff", {
+            method: managedEditor.itemId ? "PATCH" : "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: managedEditor.itemId,
+              name: staff.name,
+              email: staff.email,
+              password: fieldValue(fields, "password"),
+              role: staff.role,
+              active: staff.active
+            })
+          });
+          const result = (await response.json()) as { staff?: StaffRecord; error?: string };
+
+          if (!response.ok || !result.staff) {
+            throw new Error(result.error ?? "Unable to save staff account.");
           }
 
-          const { error } = await supabase
-            .from("profiles")
-            .update({ full_name: staff.name, role: staff.role, is_active: staff.active })
-            .eq("id", managedEditor.itemId);
-          if (error) throw error;
+          staff.id = result.staff.id;
         }
         setStaffRecords((current) =>
           managedEditor.itemId ? current.map((entry) => (entry.id === managedEditor.itemId ? staff : entry)) : [staff, ...current]
@@ -1146,9 +1178,9 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
     setCart([]);
   }
 
-  function createReceipt() {
+  async function createReceipt() {
     const now = new Date();
-    setReceipt({
+    const sale: Sale = {
       ref: `KKD-${now.getFullYear().toString().slice(2)}${String(now.getMonth() + 1).padStart(
         2,
         "0"
@@ -1167,8 +1199,66 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
       items: cart,
       discount,
       paid: amountPaid,
+      total,
       notes: "Customer copy"
-    });
+    };
+
+    if (!isDemo) {
+      const supabase = createBrowserSupabaseClient();
+
+      if (!supabase) {
+        setManagedStatus("Supabase keys are not set.");
+        return;
+      }
+
+      const { data: saleRow, error: saleError } = await supabase
+        .from("sales")
+        .insert({
+          sale_ref: sale.ref,
+          customer_name: sale.customer,
+          customer_phone: sale.phone,
+          subtotal,
+          discount: sale.discount,
+          total,
+          amount_paid: sale.paid,
+          payment_method: sale.method,
+          status: sale.status === "Part paid" ? "part_paid" : sale.status.toLowerCase(),
+          notes: sale.notes,
+          active: true
+        })
+        .select("id")
+        .single();
+
+      if (saleError) {
+        setManagedStatus(saleError.message);
+        return;
+      }
+
+      if (saleRow && sale.items.length) {
+        const { error: itemsError } = await supabase.from("sale_items").insert(
+          sale.items.map((item) => ({
+            sale_id: saleRow.id,
+            product_id: null,
+            item_name: item.name,
+            quantity: item.quantity,
+            unit_price: item.price,
+            line_total: item.quantity * item.price
+          }))
+        );
+
+        if (itemsError) {
+          setManagedStatus(itemsError.message);
+          return;
+        }
+      }
+    }
+
+    setSalesRecords((current) => [sale, ...current]);
+    setReceipt(sale);
+    setCart([]);
+    setDiscountInput("0");
+    setAmountPaidInput("0");
+    setManagedStatus(isDemo ? "Demo sale saved to sales history." : "Sale saved to sales history.");
   }
 
   function openSaleReceipt(sale: Sale) {
@@ -1313,14 +1403,16 @@ export function AdminDashboard({ userEmail, isDemo }: AdminDashboardProps) {
             customer={customer}
             phone={phone}
             discount={discount}
+            discountInput={discountInput}
             amountPaid={amountPaid}
+            amountPaidInput={amountPaidInput}
             paymentMethod={paymentMethod}
             subtotal={subtotal}
             total={total}
             onCustomerChange={setCustomer}
             onPhoneChange={setPhone}
-            onDiscountChange={setDiscount}
-            onAmountPaidChange={setAmountPaid}
+            onDiscountChange={setDiscountInput}
+            onAmountPaidChange={setAmountPaidInput}
             onPaymentMethodChange={setPaymentMethod}
             onAddToCart={addToCart}
             onQuantityInput={updateQuantityInput}
@@ -1550,7 +1642,9 @@ function PosPanel({
   customer,
   phone,
   discount,
+  discountInput,
   amountPaid,
+  amountPaidInput,
   paymentMethod,
   subtotal,
   total,
@@ -1570,14 +1664,16 @@ function PosPanel({
   customer: string;
   phone: string;
   discount: number;
+  discountInput: string;
   amountPaid: number;
+  amountPaidInput: string;
   paymentMethod: string;
   subtotal: number;
   total: number;
   onCustomerChange: (value: string) => void;
   onPhoneChange: (value: string) => void;
-  onDiscountChange: (value: number) => void;
-  onAmountPaidChange: (value: number) => void;
+  onDiscountChange: (value: string) => void;
+  onAmountPaidChange: (value: string) => void;
   onPaymentMethodChange: (value: string) => void;
   onAddToCart: (item: InventoryItem) => void;
   onQuantityInput: (id: string, value: string) => void;
@@ -1654,8 +1750,8 @@ function PosPanel({
             <input
               type="number"
               min="0"
-              value={discount}
-              onChange={(event) => onDiscountChange(Number(event.target.value))}
+              value={discountInput}
+              onChange={(event) => onDiscountChange(event.target.value)}
             />
           </label>
           <label>
@@ -1663,8 +1759,8 @@ function PosPanel({
             <input
               type="number"
               min="0"
-              value={amountPaid}
-              onChange={(event) => onAmountPaidChange(Number(event.target.value))}
+              value={amountPaidInput}
+              onChange={(event) => onAmountPaidChange(event.target.value)}
             />
           </label>
           <label>
@@ -2331,6 +2427,7 @@ function ManagedEditor({
                   type={field.type ?? "text"}
                   min={field.type === "number" ? "0" : undefined}
                   step={field.type === "number" ? "0.01" : undefined}
+                  autoComplete={field.type === "password" ? "new-password" : undefined}
                   value={field.value}
                   onChange={(event) => onChange(field.name, event.target.value)}
                 />
