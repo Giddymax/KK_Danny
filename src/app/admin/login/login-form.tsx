@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 import { Eye, EyeOff, LockKeyhole, LogIn, Mail, ShieldCheck } from "lucide-react";
-import { brand, phoneLine } from "@/lib/brand";
+import { brand } from "@/lib/brand";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 
 type LoginFormProps = {
@@ -164,8 +164,6 @@ export function LoginForm({ supabaseReady }: LoginFormProps) {
           </Link>
         ) : null}
       </form>
-
-      <p className="contact-line">{phoneLine}</p>
     </div>
   );
 }

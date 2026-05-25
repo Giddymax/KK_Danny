@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { Suspense } from "react";
-import { brand, phoneLine } from "@/lib/brand";
+import { brand } from "@/lib/brand";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { LoginForm } from "./login-form";
 
@@ -24,9 +24,6 @@ export default function LoginPage() {
             <h1>{brand.name}</h1>
             <p className="brand-subtitle">{brand.tagline}</p>
             <p className="brand-address">{brand.address}</p>
-          </div>
-          <div className="phone-strip" aria-label="Telephone numbers">
-            {phoneLine}
           </div>
         </div>
       </section>
