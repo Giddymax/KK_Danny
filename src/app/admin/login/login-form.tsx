@@ -111,7 +111,6 @@ export function LoginForm({ supabaseReady }: LoginFormProps) {
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="admin@kkdanny.com"
               autoComplete="email"
               required
             />
@@ -126,7 +125,6 @@ export function LoginForm({ supabaseReady }: LoginFormProps) {
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="Enter password"
               autoComplete="current-password"
               required
               minLength={6}
