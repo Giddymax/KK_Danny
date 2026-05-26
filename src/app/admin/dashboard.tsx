@@ -1998,11 +1998,15 @@ function ResponsiveSalesTable({
             <th>Status</th>
             <th>Total</th>
             <th>Paid</th>
+            <th>Balance</th>
             <th>Action</th>
           </tr>
         </thead>
         <tbody>
-          {sales.map((sale) => (
+          {sales.map((sale) => {
+            const total = saleTotal(sale);
+            const balance = total - sale.paid;
+            return (
             <tr key={sale.ref}>
               <td data-label="Ref">{sale.ref}</td>
               <td data-label="Customer">{sale.customer}</td>
@@ -2013,8 +2017,11 @@ function ResponsiveSalesTable({
                   {sale.status}
                 </span>
               </td>
-              <td data-label="Total">{formatGhs(saleTotal(sale))}</td>
+              <td data-label="Total">{formatGhs(total)}</td>
               <td data-label="Paid">{formatGhs(sale.paid)}</td>
+              <td data-label="Balance" className={balance > 0 ? "text-amber-700 font-semibold" : balance < 0 ? "text-red-700 font-semibold" : ""}>
+                {balance > 0 ? `${formatGhs(balance)}` : balance < 0 ? `Overpaid: ${formatGhs(Math.abs(balance))}` : "Paid"}
+              </td>
               <td data-label="Action">
                 <div className="row-actions">
                   <button type="button" className="icon-button" onClick={() => onReceipt?.(sale)} aria-label={`Print ${sale.ref}`} title="Receipt">
@@ -2033,7 +2040,8 @@ function ResponsiveSalesTable({
                 </div>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
