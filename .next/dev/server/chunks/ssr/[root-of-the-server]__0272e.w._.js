@@ -45,6 +45,8 @@ __turbopack_context__.n(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$a
 "use strict";
 
 __turbopack_context__.s([
+    "getSupabaseAdminConfig",
+    ()=>getSupabaseAdminConfig,
     "getSupabaseConfig",
     ()=>getSupabaseConfig,
     "hasSupabaseEnv",
@@ -62,6 +64,17 @@ function getSupabaseConfig() {
 }
 function hasSupabaseEnv() {
     return Boolean(getSupabaseConfig());
+}
+function getSupabaseAdminConfig() {
+    const url = ("TURBOPACK compile-time value", "https://zoaqpykmvdwqgudjhsxo.supabase.co");
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY;
+    if (!url || !key) {
+        return null;
+    }
+    return {
+        url,
+        key
+    };
 }
 }),
 "[project]/src/lib/supabase/server.ts [app-rsc] (ecmascript)", ((__turbopack_context__) => {
@@ -124,6 +137,7 @@ const dynamic = "force-dynamic";
 async function AdminPage() {
     const supabase = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["createServerSupabaseClient"])();
     let userEmail = "demo@kkdanny.local";
+    let userName = "Demo Staff";
     let isDemo = true;
     if (supabase) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -131,14 +145,17 @@ async function AdminPage() {
             (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$client$2f$components$2f$navigation$2e$react$2d$server$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["redirect"])("/admin/login");
         }
         userEmail = user.email ?? "staff@kkdanny.com";
+        const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
+        userName = profile?.full_name || userEmail;
         isDemo = false;
     }
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$app$2f$admin$2f$dashboard$2e$tsx__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["AdminDashboard"], {
         userEmail: userEmail,
+        userName: userName,
         isDemo: isDemo
     }, void 0, false, {
         fileName: "[project]/src/app/admin/page.tsx",
-        lineNumber: 25,
+        lineNumber: 34,
         columnNumber: 10
     }, this);
 }

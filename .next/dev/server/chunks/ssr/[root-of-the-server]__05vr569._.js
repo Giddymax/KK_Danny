@@ -33,6 +33,8 @@ const phoneLine = brand.phones.join(" / ");
 "use strict";
 
 __turbopack_context__.s([
+    "getSupabaseAdminConfig",
+    ()=>getSupabaseAdminConfig,
     "getSupabaseConfig",
     ()=>getSupabaseConfig,
     "hasSupabaseEnv",
@@ -50,6 +52,17 @@ function getSupabaseConfig() {
 }
 function hasSupabaseEnv() {
     return Boolean(getSupabaseConfig());
+}
+function getSupabaseAdminConfig() {
+    const url = ("TURBOPACK compile-time value", "https://zoaqpykmvdwqgudjhsxo.supabase.co");
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY;
+    if (!url || !key) {
+        return null;
+    }
+    return {
+        url,
+        key
+    };
 }
 }),
 "[project]/src/app/admin/login/login-form.tsx [app-rsc] (client reference proxy) <module evaluation>", ((__turbopack_context__) => {
@@ -168,15 +181,6 @@ function LoginPage() {
                             fileName: "[project]/src/app/admin/login/page.tsx",
                             lineNumber: 22,
                             columnNumber: 11
-                        }, this),
-                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                            className: "phone-strip",
-                            "aria-label": "Telephone numbers",
-                            children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["phoneLine"]
-                        }, void 0, false, {
-                            fileName: "[project]/src/app/admin/login/page.tsx",
-                            lineNumber: 28,
-                            columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
@@ -198,24 +202,24 @@ function LoginPage() {
                         children: "Loading sign-in..."
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/login/page.tsx",
-                        lineNumber: 35,
+                        lineNumber: 32,
                         columnNumber: 29
                     }, this),
                     children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$app$2f$admin$2f$login$2f$login$2d$form$2e$tsx__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["LoginForm"], {
                         supabaseReady: supabaseReady
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/login/page.tsx",
-                        lineNumber: 36,
+                        lineNumber: 33,
                         columnNumber: 11
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/src/app/admin/login/page.tsx",
-                    lineNumber: 35,
+                    lineNumber: 32,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/login/page.tsx",
-                lineNumber: 34,
+                lineNumber: 31,
                 columnNumber: 7
             }, this)
         ]

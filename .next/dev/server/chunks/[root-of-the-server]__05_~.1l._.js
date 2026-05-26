@@ -75,6 +75,8 @@ module.exports = mod;
 "use strict";
 
 __turbopack_context__.s([
+    "getSupabaseAdminConfig",
+    ()=>getSupabaseAdminConfig,
     "getSupabaseConfig",
     ()=>getSupabaseConfig,
     "hasSupabaseEnv",
@@ -92,6 +94,17 @@ function getSupabaseConfig() {
 }
 function hasSupabaseEnv() {
     return Boolean(getSupabaseConfig());
+}
+function getSupabaseAdminConfig() {
+    const url = ("TURBOPACK compile-time value", "https://zoaqpykmvdwqgudjhsxo.supabase.co");
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY;
+    if (!url || !key) {
+        return null;
+    }
+    return {
+        url,
+        key
+    };
 }
 }),
 "[project]/src/proxy.ts [middleware] (ecmascript)", ((__turbopack_context__) => {

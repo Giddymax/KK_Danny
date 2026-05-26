@@ -879,6 +879,15 @@ th {
   background: white;
 }
 
+.quote-modal {
+  width: min(900px, 100%);
+  max-height: min(860px, 92svh);
+  overflow: auto;
+  padding: 16px;
+  border-radius: var(--radius);
+  background: white;
+}
+
 .inventory-modal {
   width: min(720px, 100%);
   max-height: min(760px, 92svh);
@@ -929,6 +938,181 @@ th {
   background: white;
   font-size: 14px;
   line-height: 1.45;
+}
+
+.quote-print-area {
+  width: min(794px, 100%);
+  min-height: 1123px;
+  margin: 0 auto;
+  padding: 42px;
+  color: #111;
+  background: white;
+  border: 1px solid #ddd;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.quote-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 24px;
+  align-items: start;
+  padding-bottom: 22px;
+  border-bottom: 3px solid var(--green);
+}
+
+.quote-brand {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.quote-brand img {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+.quote-brand h2,
+.quote-title-block h1,
+.quote-summary h3 {
+  margin: 0;
+}
+
+.quote-brand h2 {
+  color: var(--green);
+  font-size: 24px;
+}
+
+.quote-brand p,
+.quote-title-block p,
+.quote-customer-box p,
+.quote-summary p {
+  margin: 3px 0;
+}
+
+.quote-title-block {
+  text-align: right;
+}
+
+.quote-title-block h1 {
+  color: var(--charcoal);
+  font-size: 34px;
+  text-transform: uppercase;
+}
+
+.quote-customer-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 18px;
+  margin: 24px 0;
+}
+
+.quote-customer-box > div {
+  min-height: 92px;
+  padding: 14px;
+  border: 1px solid #cfcfcf;
+  background: #fafafa;
+}
+
+.quote-customer-box span,
+.quote-footer span {
+  display: block;
+  color: #555;
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.quote-customer-box strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+}
+
+.quote-table {
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+}
+
+.quote-table th,
+.quote-table td {
+  border: 1px solid #999;
+  padding: 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.quote-table th {
+  color: white;
+  background: var(--green);
+}
+
+.quote-table td {
+  height: 44px;
+}
+
+.quote-table th:first-child,
+.quote-table td:first-child,
+.quote-table th:nth-child(3),
+.quote-table td:nth-child(3) {
+  width: 58px;
+  text-align: center;
+}
+
+.quote-table th:nth-child(4),
+.quote-table td:nth-child(4),
+.quote-table th:nth-child(5),
+.quote-table td:nth-child(5) {
+  width: 120px;
+  text-align: right;
+}
+
+.quote-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 270px;
+  gap: 22px;
+  margin-top: 24px;
+}
+
+.quote-totals-box {
+  display: grid;
+  border: 1px solid #999;
+}
+
+.quote-totals-box span {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 42px;
+  padding: 10px;
+  border-bottom: 1px solid #bbb;
+}
+
+.quote-totals-box span:last-child {
+  border-bottom: 0;
+  color: white;
+  background: var(--green);
+}
+
+.quote-totals-box em {
+  min-width: 100px;
+  border-bottom: 1px solid currentColor;
+  font-style: normal;
+}
+
+.quote-footer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 40px;
+  margin-top: 72px;
+}
+
+.quote-footer strong {
+  display: block;
+  min-height: 42px;
+  border-bottom: 1px solid #111;
 }
 
 .report-print-area h2,
@@ -1238,12 +1422,15 @@ th {
   .receipt-print-area,
   .receipt-print-area *,
   .report-print-area,
-  .report-print-area * {
+  .report-print-area *,
+  .quote-print-area,
+  .quote-print-area * {
     visibility: visible !important;
   }
 
   .receipt-print-area,
-  .report-print-area {
+  .report-print-area,
+  .quote-print-area {
     position: absolute;
     inset: 0 auto auto 0;
     box-shadow: none;
@@ -1259,8 +1446,24 @@ th {
     padding: 10mm;
   }
 
+  .quote-print-area {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 12mm;
+    border: 0;
+  }
+
+  .quote-print-area {
+    page: quote-page;
+  }
+
   @page {
     size: 80mm auto;
+    margin: 0;
+  }
+
+  @page quote-page {
+    size: A4;
     margin: 0;
   }
 }

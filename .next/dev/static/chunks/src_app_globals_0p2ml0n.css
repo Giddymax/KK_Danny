@@ -583,8 +583,9 @@ img {
 }
 
 .bar-track span {
-  background: linear-gradient(180deg, var(--gold-2), var(--green));
   width: 100%;
+  height: var(--bar-h, 0%);
+  background: #0b1f4d;
   min-height: 12px;
   display: block;
 }
@@ -714,6 +715,16 @@ img {
   display: flex;
 }
 
+.checkout-actions {
+  grid-template-columns: minmax(150px, .38fr) minmax(220px, .62fr);
+  gap: 10px;
+  display: grid;
+}
+
+.checkout-actions .primary-action, .checkout-actions .secondary-action {
+  width: 100%;
+}
+
 .table-wrap {
   width: 100%;
   overflow-x: auto;
@@ -756,6 +767,14 @@ th {
   justify-content: flex-end;
   gap: 8px;
   display: flex;
+}
+
+.row-actions {
+  flex: none;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  display: inline-flex;
 }
 
 .stack-row {
@@ -808,6 +827,24 @@ th {
   overflow: auto;
 }
 
+.report-modal {
+  border-radius: var(--radius);
+  background: #fff;
+  width: min(640px, 100%);
+  max-height: min(820px, 92svh);
+  padding: 16px;
+  overflow: auto;
+}
+
+.quote-modal {
+  border-radius: var(--radius);
+  background: #fff;
+  width: min(900px, 100%);
+  max-height: min(860px, 92svh);
+  padding: 16px;
+  overflow: auto;
+}
+
 .inventory-modal {
   border-radius: var(--radius);
   background: #fff;
@@ -847,6 +884,232 @@ th {
   font-family: Consolas, Courier New, monospace;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.report-print-area {
+  color: #111;
+  background: #fff;
+  width: min(560px, 100%);
+  margin: 0 auto;
+  padding: 20px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.quote-print-area {
+  color: #111;
+  background: #fff;
+  border: 1px solid #ddd;
+  width: min(794px, 100%);
+  min-height: 1123px;
+  margin: 0 auto;
+  padding: 42px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.quote-header {
+  border-bottom: 3px solid var(--green);
+  grid-template-columns: minmax(0, 1fr) 220px;
+  align-items: start;
+  gap: 24px;
+  padding-bottom: 22px;
+  display: grid;
+}
+
+.quote-brand {
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+  display: grid;
+}
+
+.quote-brand img {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+.quote-brand h2, .quote-title-block h1, .quote-summary h3 {
+  margin: 0;
+}
+
+.quote-brand h2 {
+  color: var(--green);
+  font-size: 24px;
+}
+
+.quote-brand p, .quote-title-block p, .quote-customer-box p, .quote-summary p {
+  margin: 3px 0;
+}
+
+.quote-title-block {
+  text-align: right;
+}
+
+.quote-title-block h1 {
+  color: var(--charcoal);
+  text-transform: uppercase;
+  font-size: 34px;
+}
+
+.quote-customer-box {
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 18px;
+  margin: 24px 0;
+  display: grid;
+}
+
+.quote-customer-box > div {
+  background: #fafafa;
+  border: 1px solid #cfcfcf;
+  min-height: 92px;
+  padding: 14px;
+}
+
+.quote-customer-box span, .quote-footer span {
+  color: #555;
+  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 850;
+  display: block;
+}
+
+.quote-customer-box strong {
+  margin-top: 4px;
+  font-size: 18px;
+  display: block;
+}
+
+.quote-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 0;
+}
+
+.quote-table th, .quote-table td {
+  text-align: left;
+  vertical-align: top;
+  border: 1px solid #999;
+  padding: 10px;
+}
+
+.quote-table th {
+  color: #fff;
+  background: var(--green);
+}
+
+.quote-table td {
+  height: 44px;
+}
+
+.quote-table th:first-child, .quote-table td:first-child, .quote-table th:nth-child(3), .quote-table td:nth-child(3) {
+  text-align: center;
+  width: 58px;
+}
+
+.quote-table th:nth-child(4), .quote-table td:nth-child(4), .quote-table th:nth-child(5), .quote-table td:nth-child(5) {
+  text-align: right;
+  width: 120px;
+}
+
+.quote-summary {
+  grid-template-columns: minmax(0, 1fr) 270px;
+  gap: 22px;
+  margin-top: 24px;
+  display: grid;
+}
+
+.quote-totals-box {
+  border: 1px solid #999;
+  display: grid;
+}
+
+.quote-totals-box span {
+  border-bottom: 1px solid #bbb;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 42px;
+  padding: 10px;
+  display: flex;
+}
+
+.quote-totals-box span:last-child {
+  color: #fff;
+  background: var(--green);
+  border-bottom: 0;
+}
+
+.quote-totals-box em {
+  border-bottom: 1px solid;
+  min-width: 100px;
+  font-style: normal;
+}
+
+.quote-footer {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 40px;
+  margin-top: 72px;
+  display: grid;
+}
+
+.quote-footer strong {
+  border-bottom: 1px solid #111;
+  min-height: 42px;
+  display: block;
+}
+
+.report-print-area h2, .report-print-area h3, .report-print-area p {
+  text-align: center;
+  margin: 4px 0;
+}
+
+.report-print-area h3 {
+  margin-top: 12px;
+}
+
+.report-print-area hr {
+  border: 0;
+  border-top: 1px solid #111;
+  margin: 14px 0;
+}
+
+.report-lines {
+  gap: 8px;
+  display: grid;
+}
+
+.report-lines span {
+  border-bottom: 1px solid #ddd;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 6px;
+  display: flex;
+}
+
+.report-lines em {
+  text-align: right;
+  flex: none;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.report-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 14px;
+  font-size: 12px;
+}
+
+.report-table th, .report-table td {
+  text-align: left;
+  vertical-align: top;
+  border: 1px solid #bbb;
+  padding: 6px;
+}
+
+.report-table th {
+  background: #f1f1f1;
+  font-weight: 850;
 }
 
 .receipt-logo {
@@ -1016,7 +1279,7 @@ th {
     min-width: 0;
   }
 
-  .form-grid, .quick-actions, .settings-layout, .cart-line {
+  .form-grid, .quick-actions, .checkout-actions, .settings-layout, .cart-line {
     grid-template-columns: 1fr;
   }
 
@@ -1025,7 +1288,7 @@ th {
     align-items: flex-start;
   }
 
-  .card-actions {
+  .card-actions, .row-actions {
     justify-content: flex-start;
   }
 
@@ -1071,20 +1334,41 @@ th {
     visibility: hidden !important;
   }
 
-  .receipt-print-area, .receipt-print-area * {
+  .receipt-print-area, .receipt-print-area *, .report-print-area, .report-print-area *, .quote-print-area, .quote-print-area * {
     visibility: visible !important;
   }
 
-  .receipt-print-area {
-    width: 80mm;
+  .receipt-print-area, .report-print-area, .quote-print-area {
     box-shadow: none;
-    padding: 4mm;
     position: absolute;
     inset: 0 auto auto 0;
   }
 
+  .receipt-print-area {
+    width: 80mm;
+    padding: 4mm;
+  }
+
+  .report-print-area {
+    width: 190mm;
+    padding: 10mm;
+  }
+
+  .quote-print-area {
+    page: quote-page;
+    border: 0;
+    width: 210mm;
+    min-height: 297mm;
+    padding: 12mm;
+  }
+
   @page {
     size: 80mm auto;
+    margin: 0;
+  }
+
+  @page quote-page {
+    size: A4;
     margin: 0;
   }
 }

@@ -369,6 +369,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
   const [amountPaidInput, setAmountPaidInput] = useState("0");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [receipt, setReceipt] = useState<Sale | null>(null);
+  const [quotePreview, setQuotePreview] = useState<QuoteRecord | null>(null);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(isDemo ? inventory : []);
   const [inventoryStatus, setInventoryStatus] = useState("");
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
@@ -1617,6 +1618,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
             onAdd={() => openManagedEditor("quote")}
             onEdit={(row) => openManagedEditor("quote", row.id)}
             onDelete={(row) => deleteManagedRecord("quote", row.id, row.customer)}
+            onPrint={setQuotePreview}
           />
         ) : null}
         {active === "customers" ? (
@@ -1648,6 +1650,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
       </section>
 
       {receipt ? <ReceiptModal sale={receipt} onClose={() => setReceipt(null)} /> : null}
+      {quotePreview ? <QuotePrintModal quote={quotePreview} onClose={() => setQuotePreview(null)} /> : null}
       {inventoryFormOpen ? (
         <InventoryEditor
           form={inventoryForm}
@@ -2268,12 +2271,14 @@ function QuotesPanel({
   rows,
   onAdd,
   onEdit,
-  onDelete
+  onDelete,
+  onPrint
 }: {
   rows: QuoteRecord[];
   onAdd: () => void;
   onEdit: (row: QuoteRecord) => void;
   onDelete: (row: QuoteRecord) => void;
+  onPrint: (row: QuoteRecord) => void;
 }) {
   return (
     <section className="panel">
@@ -2294,7 +2299,12 @@ function QuotesPanel({
               <span>{quote.phone} · {quote.request}</span>
             </div>
             <span className="status paid">{quote.status}</span>
-            <RowActions onEdit={() => onEdit(quote)} onDelete={() => onDelete(quote)} label={quote.customer} />
+            <div className="row-actions">
+              <button type="button" className="icon-button" onClick={() => onPrint(quote)} aria-label={`Print quote for ${quote.customer}`} title="Print quote">
+                <Printer size={15} />
+              </button>
+              <RowActions onEdit={() => onEdit(quote)} onDelete={() => onDelete(quote)} label={quote.customer} />
+            </div>
           </div>
         ))}
       </div>
@@ -2705,6 +2715,129 @@ function ManagedEditor({
           </button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function QuotePrintModal({ quote, onClose }: { quote: QuoteRecord; onClose: () => void }) {
+  const generatedAt = new Date();
+  const quoteDate = generatedAt.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+  const validUntil = new Date(generatedAt);
+  validUntil.setDate(validUntil.getDate() + 14);
+  const validityDate = validUntil.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+  const requestedItems = quote.request
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Quote preview">
+      <div className="quote-modal">
+        <div className="modal-actions">
+          <button type="button" className="small-action" onClick={() => window.print()}>
+            <Printer size={15} /> Print
+          </button>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close quote" title="Close quote">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="quote-print-area">
+          <header className="quote-header">
+            <div className="quote-brand">
+              <Image src={brand.logo} alt={`${brand.name} logo`} width={112} height={69} />
+              <div>
+                <h2>{brand.name}</h2>
+                <p>{brand.tagline}</p>
+                <p>{brand.address}</p>
+                <p>{brand.location}</p>
+                <p>Tel: {phoneLine}</p>
+              </div>
+            </div>
+            <div className="quote-title-block">
+              <h1>Quotation</h1>
+              <p>No: {quote.id.toUpperCase()}</p>
+              <p>Date: {quoteDate}</p>
+              <p>Valid until: {validityDate}</p>
+            </div>
+          </header>
+
+          <section className="quote-customer-box">
+            <div>
+              <span>Prepared for</span>
+              <strong>{quote.customer || "Customer"}</strong>
+              {quote.phone ? <p>{quote.phone}</p> : null}
+            </div>
+            <div>
+              <span>Status</span>
+              <strong>{quote.status}</strong>
+            </div>
+          </section>
+
+          <table className="quote-table">
+            <thead>
+              <tr>
+                <th>No.</th>
+                <th>Description</th>
+                <th>Qty</th>
+                <th>Unit price</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(requestedItems.length ? requestedItems : [quote.request || "Requested items"]).map((item, index) => (
+                <tr key={`${quote.id}-${item}-${index}`}>
+                  <td>{index + 1}</td>
+                  <td>{item}</td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                </tr>
+              ))}
+              {Array.from({ length: Math.max(0, 6 - requestedItems.length) }, (_, index) => (
+                <tr key={`${quote.id}-blank-${index}`}>
+                  <td>{requestedItems.length + index + 1}</td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <section className="quote-summary">
+            <div>
+              <h3>Notes</h3>
+              <p>Prices, availability, delivery, and payment terms should be confirmed before supply.</p>
+            </div>
+            <div className="quote-totals-box">
+              <span><strong>Subtotal</strong><em></em></span>
+              <span><strong>Discount</strong><em></em></span>
+              <span><strong>Total</strong><em></em></span>
+            </div>
+          </section>
+
+          <footer className="quote-footer">
+            <div>
+              <span>Prepared by</span>
+              <strong>{brand.name}</strong>
+            </div>
+            <div>
+              <span>Customer signature</span>
+              <strong></strong>
+            </div>
+          </footer>
+        </div>
+      </div>
     </div>
   );
 }
