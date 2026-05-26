@@ -23,6 +23,8 @@ type InvoiceItem = {
   name: string;
   quantity: number;
   unitPrice: number;
+  description?: string;
+  unit?: string;
 };
 
 type InvoiceFormProps = {
@@ -41,7 +43,9 @@ export function InvoiceForm({ quote, onSuccess, onCancel }: InvoiceFormProps) {
     id: "",
     name: "",
     quantity: 1,
-    unitPrice: 0
+    unitPrice: 0,
+    description: "",
+    unit: ""
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -57,10 +61,12 @@ export function InvoiceForm({ quote, onSuccess, onCancel }: InvoiceFormProps) {
           id: `item-${Date.now()}`,
           name: newItem.name,
           quantity: newItem.quantity,
-          unitPrice: newItem.unitPrice
+          unitPrice: newItem.unitPrice,
+          description: newItem.description,
+          unit: newItem.unit
         }
       ]);
-      setNewItem({ id: "", name: "", quantity: 1, unitPrice: 0 });
+      setNewItem({ id: "", name: "", quantity: 1, unitPrice: 0, description: "", unit: "" });
     }
   };
 
@@ -73,8 +79,19 @@ export function InvoiceForm({ quote, onSuccess, onCancel }: InvoiceFormProps) {
       id: item.id,
       name: item.name,
       quantity: 1,
-      unitPrice: item.price
+      unitPrice: item.price,
+      description: item.category || "",
+      unit: item.unit || ""
     });
+  };
+
+  const generateInvoiceReference = () => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let result = "";
+    for (let i = 0; i < 10; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -84,7 +101,7 @@ export function InvoiceForm({ quote, onSuccess, onCancel }: InvoiceFormProps) {
     try {
       // Generate receipt/invoice
       const invoiceData = {
-        reference: `INV-${Date.now()}`,
+        reference: generateInvoiceReference(),
         date: new Date().toISOString(),
         customer: quote.customer,
         phone: quote.phone,
@@ -164,6 +181,30 @@ export function InvoiceForm({ quote, onSuccess, onCancel }: InvoiceFormProps) {
           </select>
         </div>
 
+        {/* Selected Item Details */}
+        {newItem.name && (
+          <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+              <div>
+                <p className="text-gray-600">Product Name:</p>
+                <p className="font-semibold text-gray-900">{newItem.name}</p>
+              </div>
+              <div>
+                <p className="text-gray-600">Category/Description:</p>
+                <p className="font-semibold text-gray-900">{newItem.description || "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-gray-600">Unit Price:</p>
+                <p className="font-semibold text-gray-900">{formatGhs(newItem.unitPrice)}</p>
+              </div>
+              <div>
+                <p className="text-gray-600">Unit:</p>
+                <p className="font-semibold text-gray-900">{newItem.unit || "item"}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Manual Item Entry */}
         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-3">
           <p className="text-sm font-medium text-gray-700">Or Add Item Manually</p>
@@ -211,7 +252,8 @@ export function InvoiceForm({ quote, onSuccess, onCancel }: InvoiceFormProps) {
               <thead className="bg-gray-100 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Item Name</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Quantity</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Qty</th>
                   <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Unit Price</th>
                   <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Total</th>
                   <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Action</th>
@@ -220,7 +262,8 @@ export function InvoiceForm({ quote, onSuccess, onCancel }: InvoiceFormProps) {
               <tbody>
                 {items.map((item) => (
                   <tr key={item.id} className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-900">{item.name}</td>
+                    <td className="px-4 py-3 text-gray-900 font-semibold">{item.name}</td>
+                    <td className="px-4 py-3 text-gray-700 text-sm">{item.description || "N/A"}</td>
                     <td className="px-4 py-3 text-right text-gray-900">{item.quantity}</td>
                     <td className="px-4 py-3 text-right text-gray-900">{formatGhs(item.unitPrice)}</td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-900">
