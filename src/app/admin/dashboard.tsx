@@ -133,6 +133,8 @@ type QuoteRecord = {
   customer: string;
   phone: string;
   request: string;
+  quantity: string;
+  totalAmount: number;
   status: string;
   active: boolean;
 };
@@ -381,7 +383,9 @@ function quoteToFields(quote?: QuoteRecord): ManagedField[] {
   return [
     { name: "customer", label: "Customer", value: quote?.customer ?? "" },
     { name: "phone", label: "Phone", value: quote?.phone ?? "" },
-    { name: "request", label: "Requested items", value: quote?.request ?? "" },
+    { name: "request", label: "Item", value: quote?.request ?? "" },
+    { name: "quantity", label: "Quantity", value: quote?.quantity ?? "", type: "number" },
+    { name: "totalAmount", label: "Total amount", value: String(quote?.totalAmount ?? 0), type: "number" },
     { name: "status", label: "Status", value: quote?.status ?? "New", type: "select", options: ["New", "Reviewed", "Quoted", "Completed", "Cancelled"] },
     { name: "active", label: "Record status", value: quote?.active === false ? "Inactive" : "Active", type: "select", options: ["Active", "Inactive"] }
   ];
@@ -465,6 +469,8 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
       customer: quote.customer,
       phone: quote.phone,
       request: quote.request,
+      quantity: quote.quantity ?? "",
+      totalAmount: quote.totalAmount ?? 0,
       status: quote.status,
       active: true
     })) : []
@@ -569,7 +575,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
         supabase.from("suppliers").select("id,name,phone,contact_person,active").order("name", { ascending: true }),
         supabase.from("purchases").select("id,item_name,supplier_name,quantity,unit_cost,purchase_date,active").eq("active", true).order("purchase_date", { ascending: false }),
         supabase.from("expenses").select("id,category,amount,expense_date,payment_method,notes,active").eq("active", true).order("expense_date", { ascending: false }),
-        supabase.from("quote_requests").select("id,customer_name,phone,requested_items,status,active").eq("active", true).order("created_at", { ascending: false }),
+        supabase.from("quote_requests").select("id,customer_name,phone,requested_items,quantity,details,status,active").eq("active", true).order("created_at", { ascending: false }),
         supabase.from("customers").select("id,name,phone,balance,visits,active").eq("active", true).order("name", { ascending: true }),
         supabase.from("sales").select("id,sale_ref,customer_name,customer_phone,payment_method,status,total,amount_paid,discount,notes,created_at,active").eq("active", true).order("created_at", { ascending: false }),
         supabase.from("profiles").select("id,email,full_name,role,is_active").order("email", { ascending: true }),
@@ -623,6 +629,8 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
             customer: row.customer_name,
             phone: row.phone,
             request: row.requested_items,
+            quantity: row.quantity ?? "",
+            totalAmount: toNumber(row.details ?? ""),
             status: titleCaseStatus(row.status),
             active: row.active
           }))
@@ -1092,6 +1100,8 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
           customer: fieldValue(fields, "customer"),
           phone: fieldValue(fields, "phone"),
           request: fieldValue(fields, "request"),
+          quantity: fieldValue(fields, "quantity"),
+          totalAmount: moneyInputToNumber(fieldValue(fields, "totalAmount")),
           status: fieldValue(fields, "status"),
           active: activeValue
         };
@@ -1100,6 +1110,8 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
             customer_name: quote.customer,
             phone: quote.phone,
             requested_items: quote.request,
+            quantity: quote.quantity,
+            details: String(quote.totalAmount),
             status: quote.status.toLowerCase().replace(" ", "_"),
             active: quote.active
           };
@@ -2411,7 +2423,11 @@ function QuotesPanel({
           <div key={quote.id} className="stack-row">
             <div>
               <strong>{quote.customer}</strong>
-              <span>{quote.phone} · {quote.request}</span>
+              <span>
+                {quote.phone} · {quote.request}
+                {quote.quantity ? ` · Qty ${quote.quantity}` : ""}
+                {quote.totalAmount > 0 ? ` · ${formatGhs(quote.totalAmount)}` : ""}
+              </span>
             </div>
             <span className="status paid">{quote.status}</span>
             <div className="row-actions">
@@ -2847,10 +2863,7 @@ function QuotePrintModal({ quote, onClose }: { quote: QuoteRecord; onClose: () =
     month: "short",
     year: "numeric"
   });
-  const requestedItems = quote.request
-    .split(/\r?\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const requestedItems = quote.request.trim() ? [quote.request.trim()] : [];
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Quote preview">
@@ -2911,9 +2924,9 @@ function QuotePrintModal({ quote, onClose }: { quote: QuoteRecord; onClose: () =
                 <tr key={`${quote.id}-${item}-${index}`}>
                   <td>{index + 1}</td>
                   <td>{item}</td>
+                  <td>{quote.quantity}</td>
                   <td></td>
-                  <td></td>
-                  <td></td>
+                  <td>{quote.totalAmount > 0 ? formatGhs(quote.totalAmount) : ""}</td>
                 </tr>
               ))}
               {Array.from({ length: Math.max(0, 6 - requestedItems.length) }, (_, index) => (
@@ -2934,9 +2947,9 @@ function QuotePrintModal({ quote, onClose }: { quote: QuoteRecord; onClose: () =
               <p>Prices, availability, delivery, and payment terms should be confirmed before supply.</p>
             </div>
             <div className="quote-totals-box">
-              <span><strong>Subtotal</strong><em></em></span>
+              <span><strong>Subtotal</strong><em>{quote.totalAmount > 0 ? formatGhs(quote.totalAmount) : ""}</em></span>
               <span><strong>Discount</strong><em></em></span>
-              <span><strong>Total</strong><em></em></span>
+              <span><strong>Total</strong><em>{quote.totalAmount > 0 ? formatGhs(quote.totalAmount) : ""}</em></span>
             </div>
           </section>
 

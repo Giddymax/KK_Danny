@@ -501,16 +501,19 @@ select:focus {
 }
 
 .dashboard-overview-grid {
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-columns: repeat(13, minmax(0, 1fr));
 }
 
-.dashboard-overview-grid > .metric-card,
 .dashboard-filter-panel {
+  grid-column: span 3;
+}
+
+.dashboard-overview-grid > .metric-card {
   grid-column: span 2;
 }
 
 .dashboard-chart-panel {
-  grid-column: span 8;
+  grid-column: span 9;
 }
 
 .dashboard-actions-panel {
@@ -562,7 +565,7 @@ select:focus {
 }
 
 .dashboard-overview-grid .dashboard-chart-panel {
-  grid-column: span 8;
+  grid-column: span 9;
 }
 
 .panel-heading {

@@ -155,9 +155,9 @@ export const expenses = [
 ];
 
 export const quotes = [
-  { customer: "Ama Construction", phone: "0247000000", request: "80 bags cement, rods, nails", status: "New" },
-  { customer: "Kojo Mensah", phone: "0247111111", request: "Roofing sheets and delivery", status: "Quoted" },
-  { customer: "Site Foreman", phone: "0247222222", request: "Mixer service for 2 days", status: "Reviewed" }
+  { customer: "Ama Construction", phone: "0247000000", request: "Ghacem Cement", quantity: "80", totalAmount: 7840, status: "New" },
+  { customer: "Kojo Mensah", phone: "0247111111", request: "Roofing sheets and delivery", quantity: "1", totalAmount: 0, status: "Quoted" },
+  { customer: "Site Foreman", phone: "0247222222", request: "Concrete Mixer Service", quantity: "16", totalAmount: 3520, status: "Reviewed" }
 ];
 
 export const customers = [
