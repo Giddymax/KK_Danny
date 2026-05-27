@@ -1152,6 +1152,208 @@ th {
   border-bottom: 1px solid #111;
 }
 
+.quote-print-area {
+  padding: 58px 56px 42px;
+  font-size: 15px;
+  line-height: 1.42;
+}
+
+.quote-header {
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 52px;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.quote-address-block h3,
+.quote-terms h3 {
+  margin: 0 0 8px;
+  color: var(--gold);
+  font-size: 15px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.quote-address-block strong,
+.quote-address-block p {
+  display: block;
+  margin: 4px 0;
+  font-size: 16px;
+}
+
+.quote-address-block strong {
+  font-weight: 700;
+}
+
+.quote-logo-box {
+  display: grid;
+  place-items: center;
+  min-height: 74px;
+  padding: 10px;
+  border: 1px solid #cfcfcf;
+  border-radius: 6px;
+}
+
+.quote-logo-box img {
+  max-height: 72px;
+  object-fit: contain;
+}
+
+.quote-topline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 56px;
+  align-items: start;
+  margin: 70px 0 66px;
+}
+
+.quote-title-block {
+  text-align: right;
+}
+
+.quote-title-block h1 {
+  margin: 0 0 28px;
+  color: var(--gold);
+  font-size: 38px;
+  line-height: 1;
+}
+
+.quote-meta-lines {
+  display: grid;
+  gap: 7px;
+  width: min(100%, 280px);
+  margin-left: auto;
+  text-align: left;
+}
+
+.quote-meta-lines span {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+}
+
+.quote-meta-lines strong {
+  color: var(--gold);
+}
+
+.quote-meta-lines em {
+  font-style: normal;
+  text-align: right;
+}
+
+.quote-table {
+  border-bottom: 2px solid var(--gold);
+}
+
+.quote-table th,
+.quote-table td {
+  border: 0;
+  padding: 7px 6px;
+  vertical-align: middle;
+}
+
+.quote-table th {
+  background: var(--gold);
+  font-size: 16px;
+  font-weight: 900;
+  text-transform: none;
+}
+
+.quote-table td {
+  height: 30px;
+  font-size: 16px;
+}
+
+.quote-table th:first-child,
+.quote-table td:first-child,
+.quote-table th:nth-child(3),
+.quote-table td:nth-child(3),
+.quote-table th:nth-child(4),
+.quote-table td:nth-child(4) {
+  text-align: right;
+}
+
+.quote-table th:first-child,
+.quote-table td:first-child {
+  width: 58px;
+}
+
+.quote-table th:nth-child(3),
+.quote-table td:nth-child(3),
+.quote-table th:nth-child(4),
+.quote-table td:nth-child(4) {
+  width: 132px;
+}
+
+.quote-summary {
+  display: grid;
+  justify-content: end;
+  grid-template-columns: auto;
+  gap: 0;
+  margin-top: 0;
+}
+
+.quote-totals-box {
+  width: 280px;
+  border: 0;
+}
+
+.quote-totals-box span {
+  min-height: 32px;
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--gold);
+}
+
+.quote-totals-box span:last-child {
+  color: var(--gold);
+  border-bottom: 3px solid var(--gold);
+  background: transparent;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.quote-totals-box em {
+  border-bottom: 0;
+  font-weight: 800;
+  text-align: right;
+}
+
+.quote-terms {
+  margin-top: 88px;
+}
+
+.quote-terms p {
+  margin: 6px 0;
+  font-size: 16px;
+}
+
+.quote-terms p:last-child {
+  margin-top: 26px;
+}
+
+.quote-footer {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  align-items: end;
+  margin-top: 150px;
+  font-size: 15px;
+}
+
+.quote-footer strong {
+  display: inline;
+  min-height: 0;
+  border-bottom: 0;
+}
+
+.quote-footer div:nth-child(2) {
+  text-align: center;
+}
+
+.quote-footer div:nth-child(3) {
+  text-align: right;
+}
+
 .report-print-area h2,
 .report-print-area h3,
 .report-print-area p {
