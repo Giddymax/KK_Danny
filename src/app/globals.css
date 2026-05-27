@@ -925,6 +925,15 @@ th {
   background: white;
 }
 
+.quote-cart-modal {
+  width: min(1220px, 100%);
+  max-height: min(860px, 92svh);
+  overflow: auto;
+  padding: 18px;
+  border-radius: var(--radius);
+  background: white;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;

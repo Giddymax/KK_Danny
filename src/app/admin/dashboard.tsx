@@ -135,6 +135,7 @@ type QuoteRecord = {
   request: string;
   quantity: string;
   totalAmount: number;
+  items?: CartLine[];
   status: string;
   active: boolean;
 };
@@ -336,6 +337,60 @@ function isLegacyReceiptCopyNote(value: string | null | undefined) {
   return value?.trim().toLowerCase() === ["customer", "copy"].join(" ");
 }
 
+function parseQuoteDetails(value: unknown): { totalAmount: number; items: CartLine[] } {
+  if (typeof value !== "string" || !value.trim()) {
+    return { totalAmount: 0, items: [] };
+  }
+
+  try {
+    const parsed = JSON.parse(value) as { totalAmount?: unknown; items?: unknown };
+    const items = Array.isArray(parsed.items)
+      ? parsed.items
+          .filter((item): item is Partial<CartLine> & { id: string; name: string } =>
+            typeof item?.id === "string" && typeof item?.name === "string"
+          )
+          .map((item) => ({
+            id: item.id,
+            name: item.name,
+            quantity: Number.isFinite(Number(item.quantity)) ? Number(item.quantity) : 1,
+            price: Number.isFinite(Number(item.price)) ? Number(item.price) : 0
+          }))
+      : [];
+    return {
+      totalAmount: Number.isFinite(Number(parsed.totalAmount)) ? Number(parsed.totalAmount) : 0,
+      items
+    };
+  } catch {
+    return { totalAmount: toNumber(value), items: [] };
+  }
+}
+
+function quoteRecordToCart(quote?: QuoteRecord): CartLine[] {
+  if (!quote) {
+    return [];
+  }
+
+  if (quote.items?.length) {
+    return quote.items;
+  }
+
+  const names = quote.request
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const quantities = quote.quantity
+    .split(/\r?\n|,/)
+    .map((item) => Number(item.trim()))
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  return names.map((name, index) => ({
+    id: `quote-${index}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    name,
+    quantity: quantities[index] ?? 1,
+    price: index === 0 && quote.totalAmount > 0 ? quote.totalAmount / (quantities[index] || 1) : 0
+  }));
+}
+
 function saleToFields(sale?: Sale): ManagedField[] {
   return [
     { name: "customer", label: "Customer", value: sale?.customer ?? "Walk-in" },
@@ -428,6 +483,11 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customer, setCustomer] = useState("Walk-in");
   const [phone, setPhone] = useState("");
+  const [quoteCustomer, setQuoteCustomer] = useState("");
+  const [quotePhone, setQuotePhone] = useState("");
+  const [quoteCart, setQuoteCart] = useState<CartLine[]>([]);
+  const [editingQuote, setEditingQuote] = useState<QuoteRecord | null>(null);
+  const [quoteEditorOpen, setQuoteEditorOpen] = useState(false);
   const [discountInput, setDiscountInput] = useState("0");
   const [amountPaidInput, setAmountPaidInput] = useState("0");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
@@ -624,16 +684,20 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
 
       if (quotesResult.data) {
         setQuoteRecords(
-          quotesResult.data.map((row) => ({
-            id: row.id,
-            customer: row.customer_name,
-            phone: row.phone,
-            request: row.requested_items,
-            quantity: row.quantity ?? "",
-            totalAmount: toNumber(row.details ?? ""),
-            status: titleCaseStatus(row.status),
-            active: row.active
-          }))
+          quotesResult.data.map((row) => {
+            const details = parseQuoteDetails(row.details);
+            return {
+              id: row.id,
+              customer: row.customer_name,
+              phone: row.phone,
+              request: row.requested_items,
+              quantity: row.quantity ?? "",
+              totalAmount: details.totalAmount,
+              items: details.items,
+              status: titleCaseStatus(row.status),
+              active: row.active
+            };
+          })
         );
       }
 
@@ -917,6 +981,118 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
     }
 
     setManagedStatus("");
+  }
+
+  function openQuoteEditor(quote?: QuoteRecord) {
+    setEditingQuote(quote ?? null);
+    setQuoteCustomer(quote?.customer ?? "");
+    setQuotePhone(quote?.phone ?? "");
+    setQuoteCart(quoteRecordToCart(quote));
+    setQuoteEditorOpen(true);
+    setManagedStatus("");
+  }
+
+  function closeQuoteEditor() {
+    if (managedPending) {
+      return;
+    }
+
+    setQuoteEditorOpen(false);
+    setEditingQuote(null);
+    setQuoteCustomer("");
+    setQuotePhone("");
+    setQuoteCart([]);
+  }
+
+  function addToQuoteCart(item: InventoryItem) {
+    setQuoteCart((current) => {
+      const existing = current.find((line) => line.id === item.id);
+      if (existing) {
+        return current.map((line) =>
+          line.id === item.id ? { ...line, quantity: line.quantity + 1 } : line
+        );
+      }
+      return [...current, { id: item.id, name: item.name, quantity: 1, price: item.price }];
+    });
+    setManagedStatus("");
+  }
+
+  function updateQuoteQuantityInput(id: string, value: string) {
+    const desiredQuantity = value === "" ? 0 : Math.max(Number(value), 0);
+    const nextQuantity = Number.isFinite(desiredQuantity) ? desiredQuantity : 1;
+    setQuoteCart((current) =>
+      current.map((entry) => (entry.id === id ? { ...entry, quantity: nextQuantity } : entry))
+    );
+  }
+
+  function normalizeQuoteQuantity(id: string) {
+    setQuoteCart((current) =>
+      current.map((entry) => (entry.id === id ? { ...entry, quantity: Math.max(entry.quantity, 1) } : entry))
+    );
+  }
+
+  function clearQuoteCart() {
+    setQuoteCart([]);
+    setManagedStatus("");
+  }
+
+  async function saveQuoteRecord() {
+    const totalAmount = quoteCart.reduce((sum, item) => sum + item.quantity * item.price, 0);
+    const quote: QuoteRecord = {
+      id: editingQuote?.id ?? makeDemoId("quote"),
+      customer: quoteCustomer.trim() || "Customer",
+      phone: quotePhone.trim(),
+      request: quoteCart.map((item) => item.name).join(", "),
+      quantity: quoteCart.map((item) => String(item.quantity)).join(", "),
+      totalAmount,
+      items: quoteCart,
+      status: editingQuote?.status ?? "New",
+      active: editingQuote?.active ?? true
+    };
+
+    if (!quote.items?.length) {
+      setManagedStatus("Add at least one item to the quote.");
+      return;
+    }
+
+    const supabase = isDemo ? null : createBrowserSupabaseClient();
+    setManagedPending(true);
+
+    try {
+      if (supabase) {
+        const payload = {
+          customer_name: quote.customer,
+          phone: quote.phone,
+          requested_items: quote.request,
+          quantity: quote.quantity,
+          details: JSON.stringify({ totalAmount: quote.totalAmount, items: quote.items }),
+          status: quote.status.toLowerCase().replace(" ", "_"),
+          active: quote.active
+        };
+        const query = editingQuote
+          ? supabase.from("quote_requests").update(payload).eq("id", editingQuote.id)
+          : supabase.from("quote_requests").insert(payload).select("id").single();
+        const { data, error } = await query;
+        if (error) throw error;
+        quote.id = data?.id ?? quote.id;
+      }
+
+      setQuoteRecords((current) =>
+        editingQuote
+          ? current.map((entry) => (entry.id === editingQuote.id ? quote : entry))
+          : [quote, ...current]
+      );
+      setManagedStatus(editingQuote ? "Quote updated." : "Quote saved.");
+      setQuoteEditorOpen(false);
+      setEditingQuote(null);
+      setQuoteCustomer("");
+      setQuotePhone("");
+      setQuoteCart([]);
+    } catch (error) {
+      setManagedStatus(error instanceof Error ? error.message : "Unable to save quote.");
+    } finally {
+      setManagedPending(false);
+    }
   }
 
   function updateManagedField(name: string, value: string) {
@@ -1622,13 +1798,13 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
             onPeriodChange={setDashboardPeriod}
             pendingQuotesCount={pendingQuotesCount}
             onNewSale={() => setActive("pos")}
-            onAddStock={() => {
-              setActive("inventory");
-              openInventoryForm();
-            }}
-            onCreateQuote={() => {
-              setActive("quotes");
-              openManagedEditor("quote");
+          onAddStock={() => {
+            setActive("inventory");
+            openInventoryForm();
+          }}
+          onCreateQuote={() => {
+            setActive("quotes");
+              openQuoteEditor();
             }}
             onReprintReceipt={() => setActive("sales")}
           />
@@ -1708,8 +1884,8 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
         {active === "quotes" ? (
           <QuotesPanel
             rows={quoteRecords}
-            onAdd={() => openManagedEditor("quote")}
-            onEdit={(row) => openManagedEditor("quote", row.id)}
+            onAdd={() => openQuoteEditor()}
+            onEdit={openQuoteEditor}
             onDelete={(row) => deleteManagedRecord("quote", row.id, row.customer)}
             onPrint={setQuotePreview}
           />
@@ -1744,6 +1920,25 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
 
       {receipt ? <ReceiptModal sale={receipt} onClose={() => setReceipt(null)} /> : null}
       {quotePreview ? <QuotePrintModal quote={quotePreview} onClose={() => setQuotePreview(null)} /> : null}
+      {quoteEditorOpen ? (
+        <QuoteCartEditor
+          title={editingQuote ? "Edit quote" : "Add quote"}
+          customer={quoteCustomer}
+          phone={quotePhone}
+          cart={quoteCart}
+          total={quoteCart.reduce((sum, item) => sum + item.quantity * item.price, 0)}
+          pending={managedPending}
+          inventoryItems={inventoryItems}
+          onCustomerChange={setQuoteCustomer}
+          onPhoneChange={setQuotePhone}
+          onAddToCart={addToQuoteCart}
+          onQuantityInput={updateQuoteQuantityInput}
+          onQuantityBlur={normalizeQuoteQuantity}
+          onClearCart={clearQuoteCart}
+          onCancel={closeQuoteEditor}
+          onSave={saveQuoteRecord}
+        />
+      ) : null}
       {inventoryFormOpen ? (
         <InventoryEditor
           form={inventoryForm}
@@ -2062,6 +2257,136 @@ function PosPanel({
         </div>
       </div>
     </section>
+  );
+}
+
+function QuoteCartEditor({
+  title,
+  customer,
+  phone,
+  cart,
+  total,
+  pending,
+  inventoryItems,
+  onCustomerChange,
+  onPhoneChange,
+  onAddToCart,
+  onQuantityInput,
+  onQuantityBlur,
+  onClearCart,
+  onCancel,
+  onSave
+}: {
+  title: string;
+  customer: string;
+  phone: string;
+  cart: CartLine[];
+  total: number;
+  pending: boolean;
+  inventoryItems: InventoryItem[];
+  onCustomerChange: (value: string) => void;
+  onPhoneChange: (value: string) => void;
+  onAddToCart: (item: InventoryItem) => void;
+  onQuantityInput: (id: string, value: string) => void;
+  onQuantityBlur: (id: string) => void;
+  onClearCart: () => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section className="quote-cart-modal" role="dialog" aria-modal="true" aria-labelledby="quote-cart-title">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Quote cart</p>
+            <h2 id="quote-cart-title">{title}</h2>
+          </div>
+          <button type="button" className="icon-button" onClick={onCancel} aria-label="Close quote form" title="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        <section className="pos-layout">
+          <div className="panel">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Products & services</p>
+                <h2>Add items</h2>
+              </div>
+            </div>
+            <div className="product-grid">
+              {inventoryItems.map((item) => (
+                <button key={item.id} type="button" className="product-tile" onClick={() => onAddToCart(item)}>
+                  <span>{item.category}</span>
+                  <strong>{item.name}</strong>
+                  <small>
+                    {formatGhs(item.price)} / {item.unit}
+                  </small>
+                  <em>{item.isService ? "Service item" : `${item.stock} in stock`}</em>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="panel checkout-panel">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Checkout</p>
+                <h2>Current quote</h2>
+              </div>
+            </div>
+
+            <div className="form-grid">
+              <label>
+                <span>Customer</span>
+                <input value={customer} onChange={(event) => onCustomerChange(event.target.value)} />
+              </label>
+              <label>
+                <span>Phone</span>
+                <input value={phone} onChange={(event) => onPhoneChange(event.target.value)} />
+              </label>
+            </div>
+
+            <div className="cart-lines">
+              {cart.map((line) => (
+                <div key={line.id} className="cart-line">
+                  <div>
+                    <strong>{line.name}</strong>
+                    <span>{formatGhs(line.price)}</span>
+                  </div>
+                  <input
+                    type="number"
+                    min="1"
+                    value={line.quantity || ""}
+                    onChange={(event) => onQuantityInput(line.id, event.target.value)}
+                    onBlur={() => onQuantityBlur(line.id)}
+                    aria-label={`Quantity for ${line.name}`}
+                  />
+                  <strong>{formatGhs(line.price * line.quantity)}</strong>
+                </div>
+              ))}
+            </div>
+
+            <div className="totals-box">
+              <span>Subtotal <strong>{formatGhs(total)}</strong></span>
+              <span>Discount <strong>-{formatGhs(0)}</strong></span>
+              <span>Total <strong>{formatGhs(total)}</strong></span>
+            </div>
+
+            <div className="checkout-actions">
+              <button type="button" className="secondary-action" onClick={onClearCart} disabled={cart.length === 0 || pending}>
+                <Trash2 size={18} />
+                Clear cart
+              </button>
+              <button type="button" className="primary-action" onClick={onSave} disabled={cart.length === 0 || pending}>
+                <ClipboardList size={18} />
+                {pending ? "Saving..." : "Save quote"}
+              </button>
+            </div>
+          </div>
+        </section>
+      </section>
+    </div>
   );
 }
 
@@ -2863,7 +3188,7 @@ function QuotePrintModal({ quote, onClose }: { quote: QuoteRecord; onClose: () =
     month: "short",
     year: "numeric"
   });
-  const requestedItems = quote.request.trim() ? [quote.request.trim()] : [];
+  const requestedItems = quoteRecordToCart(quote);
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Quote preview">
@@ -2920,13 +3245,13 @@ function QuotePrintModal({ quote, onClose }: { quote: QuoteRecord; onClose: () =
               </tr>
             </thead>
             <tbody>
-              {(requestedItems.length ? requestedItems : [quote.request || "Requested items"]).map((item, index) => (
-                <tr key={`${quote.id}-${item}-${index}`}>
+              {(requestedItems.length ? requestedItems : quoteRecordToCart({ ...quote, request: quote.request || "Requested items" })).map((item, index) => (
+                <tr key={`${quote.id}-${item.name}-${index}`}>
                   <td>{index + 1}</td>
-                  <td>{item}</td>
-                  <td>{quote.quantity}</td>
-                  <td></td>
-                  <td>{quote.totalAmount > 0 ? formatGhs(quote.totalAmount) : ""}</td>
+                  <td>{item.name}</td>
+                  <td>{item.quantity}</td>
+                  <td>{item.price > 0 ? formatGhs(item.price) : ""}</td>
+                  <td>{item.price > 0 ? formatGhs(item.price * item.quantity) : ""}</td>
                 </tr>
               ))}
               {Array.from({ length: Math.max(0, 6 - requestedItems.length) }, (_, index) => (
