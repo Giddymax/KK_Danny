@@ -218,6 +218,10 @@ function statusFor(total: number, paid: number) {
   return "Paid";
 }
 
+function saleStatusToDatabase(status: Sale["status"]) {
+  return status === "Part paid" ? "part_paid" : status.toLowerCase();
+}
+
 function inventoryRowToItem(row: InventoryRow): InventoryItem {
   return {
     id: row.id,
@@ -936,6 +940,9 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
 
     try {
       if (managedEditor.kind === "sale") {
+        const existingSale = managedEditor.itemId
+          ? salesRecords.find((entry) => entry.ref === managedEditor.itemId)
+          : undefined;
         const sale: Sale = {
           ref: managedEditor.itemId ?? `KKD-${Date.now()}`,
           customer: fieldValue(fields, "customer") || "Walk-in",
@@ -943,24 +950,24 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
           date: new Date().toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" }),
           method: fieldValue(fields, "method") || "Cash",
           staff: userName,
-          status: fieldValue(fields, "status") as Sale["status"],
-          items: managedEditor.itemId ? salesRecords.find((entry) => entry.ref === managedEditor.itemId)?.items ?? [] : [],
+          status: "Paid",
+          items: existingSale?.items ?? [],
           discount: toNumber(fieldValue(fields, "discount")),
           paid: toNumber(fieldValue(fields, "paid")),
-          total: managedEditor.itemId
-            ? salesRecords.find((entry) => entry.ref === managedEditor.itemId)?.total
-            : toNumber(fieldValue(fields, "paid")),
+          total: existingSale?.total ?? toNumber(fieldValue(fields, "paid")),
           notes: fieldValue(fields, "notes")
         };
+        const totalAmount = sale.items.length ? saleTotal(sale) : sale.total ?? sale.paid;
+        sale.total = totalAmount;
+        sale.status = statusFor(totalAmount, sale.paid);
 
         if (supabase) {
-          const totalAmount = sale.items.length ? saleTotal(sale) : sale.paid;
           const payload = {
             sale_ref: sale.ref,
             customer_name: sale.customer,
             customer_phone: sale.phone,
             payment_method: sale.method,
-            status: sale.status === "Part paid" ? "part_paid" : sale.status.toLowerCase(),
+            status: saleStatusToDatabase(sale.status),
             discount: sale.discount,
             total: totalAmount,
             amount_paid: sale.paid,
@@ -1422,7 +1429,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
           total,
           amount_paid: sale.paid,
           payment_method: sale.method,
-          status: sale.status === "Part paid" ? "part_paid" : sale.status.toLowerCase(),
+          status: saleStatusToDatabase(sale.status),
           notes: sale.staff,
           active: true
         })
@@ -1647,7 +1654,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
         {active === "sales" ? (
           <SalesPanel
             sales={salesRecords}
-            onAdd={() => openManagedEditor("sale")}
+            onAdd={() => setActive("pos")}
             onEdit={(sale) => openManagedEditor("sale", sale.ref)}
             onDelete={(sale) => deleteManagedRecord("sale", sale.ref, sale.ref)}
             onReceipt={openSaleReceipt}
@@ -1779,8 +1786,8 @@ function DashboardOverview({
   const maxRevenue = Math.max(...bars.map((bar) => bar.value), 1);
 
   return (
-    <section className="dashboard-grid">
-      <div className="panel wide-panel dashboard-filter-panel">
+    <section className="dashboard-grid dashboard-overview-grid">
+      <div className="panel dashboard-filter-panel">
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Dashboard time filter</p>
@@ -1808,7 +1815,7 @@ function DashboardOverview({
       <MetricCard icon={ClipboardList} label="Pending quotes" value={`${pendingQuotesCount} open`} tone="blue" />
       <MetricCard icon={Boxes} label="Low stock" value={`${lowStockCount} items`} tone="red" />
 
-      <div className="panel chart-panel">
+      <div className="panel chart-panel dashboard-chart-panel">
         <div className="panel-heading">
           <div>
             <p className="eyebrow">{reportPeriodLabel(period)} view</p>
@@ -1829,7 +1836,7 @@ function DashboardOverview({
         </div>
       </div>
 
-      <div className="panel">
+      <div className="panel dashboard-actions-panel">
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Quick actions</p>
@@ -1852,7 +1859,7 @@ function DashboardOverview({
         </div>
       </div>
 
-      <div className="panel wide-panel">
+      <div className="panel dashboard-sales-panel">
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Recent activity</p>
