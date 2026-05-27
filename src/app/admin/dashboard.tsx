@@ -161,6 +161,10 @@ type SettingsRecord = {
   receiptFooter: string;
 };
 
+const demoStorageKeys = {
+  inventory: "kk-danny-demo-inventory-v1"
+} as const;
+
 const navItems = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "pos", label: "POS", icon: ShoppingCart },
@@ -239,6 +243,54 @@ function inventoryItemToForm(item?: InventoryItem): InventoryFormState {
     supplier: item?.supplier ?? "",
     isService: Boolean(item?.isService)
   };
+}
+
+function readStoredDemoInventory() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const value = window.localStorage.getItem(demoStorageKeys.inventory);
+    if (!value) {
+      return null;
+    }
+
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+
+    return parsed
+      .filter((item): item is Partial<InventoryItem> & { id: string; name: string } =>
+        typeof item?.id === "string" && typeof item?.name === "string"
+      )
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        category: typeof item.category === "string" ? item.category : "",
+        unit: typeof item.unit === "string" && item.unit ? item.unit : "item",
+        price: Number.isFinite(Number(item.price)) ? Number(item.price) : 0,
+        stock: Number.isFinite(Number(item.stock)) ? Number(item.stock) : 0,
+        threshold: Number.isFinite(Number(item.threshold)) ? Number(item.threshold) : 0,
+        supplier: typeof item.supplier === "string" ? item.supplier : "",
+        isService: Boolean(item.isService)
+      }));
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredDemoInventory(items: InventoryItem[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(demoStorageKeys.inventory, JSON.stringify(items));
+  } catch {
+    // Demo persistence is best-effort; Supabase remains the durable store for production.
+  }
 }
 
 function fieldValue(fields: ManagedField[], name: string) {
@@ -455,6 +507,18 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
   const dashboardDiscount = dashboardSales.reduce((sum, sale) => sum + sale.discount, 0);
   const pendingQuotesCount = quoteRecords.filter((q) => q.status === "New").length;
   const activeLabel = navItems.find((item) => item.key === active)?.label ?? "Dashboard";
+
+  useEffect(() => {
+    if (!isDemo) {
+      return;
+    }
+
+    const storedInventory = readStoredDemoInventory();
+
+    if (storedInventory) {
+      setInventoryItems(storedInventory);
+    }
+  }, [isDemo]);
 
   useEffect(() => {
     if (isDemo) {
@@ -699,10 +763,14 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
     };
 
     if (isDemo) {
-      setInventoryItems((current) =>
-        editingItem ? current.map((entry) => (entry.id === editingItem.id ? item : entry)) : [item, ...current]
-      );
-      setInventoryStatus("Demo inventory updated. Connect Supabase to save changes permanently.");
+      setInventoryItems((current) => {
+        const next = editingItem
+          ? current.map((entry) => (entry.id === editingItem.id ? item : entry))
+          : [item, ...current];
+        writeStoredDemoInventory(next);
+        return next;
+      });
+      setInventoryStatus("Inventory item saved.");
       closeInventoryForm();
       return;
     }
@@ -767,8 +835,12 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
     }
 
     if (isDemo) {
-      setInventoryItems((current) => current.filter((entry) => entry.id !== item.id));
-      setInventoryStatus("Demo inventory item deleted. Connect Supabase to save changes permanently.");
+      setInventoryItems((current) => {
+        const next = current.filter((entry) => entry.id !== item.id);
+        writeStoredDemoInventory(next);
+        return next;
+      });
+      setInventoryStatus("Inventory item deleted.");
       return;
     }
 
@@ -1259,11 +1331,14 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
   }
 
   async function updateInventoryStock(itemId: string, nextStock: number) {
-    setInventoryItems((current) =>
-      current.map((item) => (item.id === itemId ? { ...item, stock: Math.max(nextStock, 0) } : item))
-    );
+    const stock = Math.max(nextStock, 0);
 
     if (isDemo) {
+      setInventoryItems((current) => {
+        const next = current.map((item) => (item.id === itemId ? { ...item, stock } : item));
+        writeStoredDemoInventory(next);
+        return next;
+      });
       return;
     }
 
@@ -1273,14 +1348,20 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
       throw new Error("Supabase keys are not set.");
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("inventory_items")
-      .update({ stock: Math.max(nextStock, 0) })
-      .eq("id", itemId);
+      .update({ stock })
+      .eq("id", itemId)
+      .select("id,name,category,unit,price,stock,threshold,supplier,is_service")
+      .single();
 
     if (error) {
       throw error;
     }
+
+    setInventoryItems((current) =>
+      current.map((item) => (item.id === itemId ? inventoryRowToItem(data) : item))
+    );
   }
 
   async function adjustInventoryByItemName(itemName: string, quantityDelta: number) {
