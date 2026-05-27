@@ -3176,18 +3176,22 @@ function ManagedEditor({
 
 function QuotePrintModal({ quote, onClose }: { quote: QuoteRecord; onClose: () => void }) {
   const generatedAt = new Date();
-  const quoteDate = generatedAt.toLocaleDateString("en-GB");
+  const quoteDate = generatedAt.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
   const validUntil = new Date(generatedAt);
   validUntil.setDate(validUntil.getDate() + 14);
-  const validityDate = validUntil.toLocaleDateString("en-GB");
+  const validityDate = validUntil.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
   const requestedItems = quoteRecordToCart(quote);
   const quoteRows = requestedItems.length
     ? requestedItems
     : quoteRecordToCart({ ...quote, request: quote.request || "Requested items" });
-  const subtotal = requestedItems.length
-    ? requestedItems.reduce((sum, item) => sum + item.quantity * item.price, 0)
-    : quote.totalAmount;
-  const blankRowCount = Math.max(0, 10 - quoteRows.length);
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Quote preview">
@@ -3203,38 +3207,42 @@ function QuotePrintModal({ quote, onClose }: { quote: QuoteRecord; onClose: () =
 
         <div className="quote-print-area">
           <header className="quote-header">
-            <div className="quote-address-block">
-              <h3>From</h3>
-              <strong>{brand.name}</strong>
-              <p>{brand.address}</p>
-              <p>{brand.location}</p>
+            <div className="quote-brand">
+              <Image src={brand.logo} alt={`${brand.name} logo`} width={112} height={69} />
+              <div>
+                <h2>{brand.name}</h2>
+                <p>{brand.tagline}</p>
+                <p>{brand.address}</p>
+                <p>{brand.location}</p>
+                <p>Tel: {phoneLine}</p>
+              </div>
             </div>
-            <div className="quote-logo-box">
-              <Image src={brand.logo} alt={`${brand.name} logo`} width={168} height={104} />
+            <div className="quote-title-block">
+              <h1>Quotation</h1>
+              <p>No: {quote.id.toUpperCase()}</p>
+              <p>Date: {quoteDate}</p>
+              <p>Valid until: {validityDate}</p>
             </div>
           </header>
 
-          <section className="quote-topline">
-            <div className="quote-address-block">
-              <h3>To</h3>
-              <strong>{quote.customer || "Customer Name"}</strong>
+          <section className="quote-customer-box">
+            <div>
+              <span>Prepared for</span>
+              <strong>{quote.customer || "Customer"}</strong>
               {quote.phone ? <p>{quote.phone}</p> : null}
             </div>
-            <div className="quote-title-block">
-              <h1>Quote</h1>
-              <div className="quote-meta-lines">
-                <span><strong>Quote #:</strong><em>{quote.id.toUpperCase()}</em></span>
-                <span><strong>Quote Date:</strong><em>{quoteDate}</em></span>
-                <span><strong>Due Date:</strong><em>{validityDate}</em></span>
-              </div>
+            <div>
+              <span>Status</span>
+              <strong>{quote.status}</strong>
             </div>
           </section>
 
           <table className="quote-table">
             <thead>
               <tr>
-                <th>Qty</th>
+                <th>No.</th>
                 <th>Description</th>
+                <th>Qty</th>
                 <th>Unit price</th>
                 <th>Amount</th>
               </tr>
@@ -3242,15 +3250,17 @@ function QuotePrintModal({ quote, onClose }: { quote: QuoteRecord; onClose: () =
             <tbody>
               {quoteRows.map((item, index) => (
                 <tr key={`${quote.id}-${item.name}-${index}`}>
-                  <td>{item.quantity}</td>
+                  <td>{index + 1}</td>
                   <td>{item.name}</td>
+                  <td>{item.quantity}</td>
                   <td>{item.price > 0 ? formatGhs(item.price) : ""}</td>
                   <td>{item.price > 0 ? formatGhs(item.price * item.quantity) : ""}</td>
                 </tr>
               ))}
-              {Array.from({ length: blankRowCount }, (_, index) => (
+              {Array.from({ length: Math.max(0, 6 - requestedItems.length) }, (_, index) => (
                 <tr key={`${quote.id}-blank-${index}`}>
-                  <td>0</td>
+                  <td>{requestedItems.length + index + 1}</td>
+                  <td></td>
                   <td></td>
                   <td></td>
                   <td></td>
@@ -3260,28 +3270,25 @@ function QuotePrintModal({ quote, onClose }: { quote: QuoteRecord; onClose: () =
           </table>
 
           <section className="quote-summary">
-            <div className="quote-totals-box">
-              <span><strong>Subtotal</strong><em>{formatGhs(subtotal)}</em></span>
-              <span><strong>Total</strong><em>{formatGhs(subtotal)}</em></span>
+            <div>
+              <h3>Notes</h3>
+              <p>Prices, availability, delivery, and payment terms should be confirmed before supply.</p>
             </div>
-          </section>
-
-          <section className="quote-terms">
-            <h3>Terms and conditions</h3>
-            <p>Payment is due within 14 days of quote acceptance.</p>
-            <p>Prices, availability, delivery, and payment terms should be confirmed before supply.</p>
-            <p>Thank you for your business!</p>
+            <div className="quote-totals-box">
+              <span><strong>Subtotal</strong><em>{quote.totalAmount > 0 ? formatGhs(quote.totalAmount) : ""}</em></span>
+              <span><strong>Discount</strong><em></em></span>
+              <span><strong>Total</strong><em>{quote.totalAmount > 0 ? formatGhs(quote.totalAmount) : ""}</em></span>
+            </div>
           </section>
 
           <footer className="quote-footer">
             <div>
-              <strong>Tel:</strong> {phoneLine}
+              <span>Prepared by</span>
+              <strong>{brand.name}</strong>
             </div>
             <div>
-              <strong>Email:</strong> -
-            </div>
-            <div>
-              <strong>Web:</strong> -
+              <span>Customer signature</span>
+              <strong></strong>
             </div>
           </footer>
         </div>
