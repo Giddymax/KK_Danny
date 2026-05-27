@@ -39,28 +39,25 @@ __turbopack_context__.s([
 ]);
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = /*#__PURE__*/ __turbopack_context__.i("[project]/node_modules/next/dist/build/polyfills/process.js [app-client] (ecmascript)");
 function getSupabaseConfig() {
-    const url = ("TURBOPACK compile-time value", "https://zoaqpykmvdwqgudjhsxo.supabase.co");
-    const key = ("TURBOPACK compile-time value", "sb_publishable_GkJimNIAahp9cACyLxF51Q_wabQoVhA") ?? __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"].env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable
+    const url = ("TURBOPACK compile-time value", "");
+    const key = ("TURBOPACK compile-time value", "") ?? ("TURBOPACK compile-time value", "");
+    if ("TURBOPACK compile-time truthy", 1) {
+        return null;
+    }
+    //TURBOPACK unreachable
     ;
-    return {
-        url,
-        key
-    };
 }
 function hasSupabaseEnv() {
     return Boolean(getSupabaseConfig());
 }
 function getSupabaseAdminConfig() {
-    const url = ("TURBOPACK compile-time value", "https://zoaqpykmvdwqgudjhsxo.supabase.co");
+    const url = ("TURBOPACK compile-time value", "");
     const key = __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"].env.SUPABASE_SERVICE_ROLE_KEY ?? __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"].env.SUPABASE_SECRET_KEY;
-    if (!url || !key) {
+    if ("TURBOPACK compile-time truthy", 1) {
         return null;
     }
-    return {
-        url,
-        key
-    };
+    //TURBOPACK unreachable
+    ;
 }
 if (typeof globalThis.$RefreshHelpers$ === 'object' && globalThis.$RefreshHelpers !== null) {
     __turbopack_context__.k.registerExports(__turbopack_context__.m, globalThis.$RefreshHelpers$);

@@ -5,6 +5,7 @@ import {
   BadgeDollarSign,
   Boxes,
   Building2,
+  CalendarDays,
   ClipboardList,
   CreditCard,
   Edit3,
@@ -81,6 +82,8 @@ type ManagedKind =
   | "customer"
   | "staff"
   | "settings";
+
+type ReportPeriod = "today" | "yesterday" | "this-month" | "last-30" | "all";
 
 type ManagedField = {
   name: string;
@@ -436,6 +439,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
   const [managedEditor, setManagedEditor] = useState<ManagedEditorState | null>(null);
   const [managedStatus, setManagedStatus] = useState("");
   const [managedPending, setManagedPending] = useState(false);
+  const [dashboardPeriod, setDashboardPeriod] = useState<ReportPeriod>("today");
 
   const subtotal = useMemo(
     () => cart.reduce((sum, item) => sum + item.quantity * item.price, 0),
@@ -445,23 +449,10 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
   const amountPaid = moneyInputToNumber(amountPaidInput);
   const total = Math.max(subtotal - discount, 0);
   const lowStock = inventoryItems.filter((item) => !item.isService && item.stock <= item.threshold);
-  const today = new Date();
-  const todayRevenue = salesRecords
-    .filter((sale) => {
-      const d = parseSaleDate(sale.date);
-      return d !== null && d.toDateString() === today.toDateString();
-    })
-    .reduce((sum, sale) => sum + saleTotal(sale), 0);
-  const todaySalesCount = salesRecords.filter((sale) => {
-    const d = parseSaleDate(sale.date);
-    return d !== null && d.toDateString() === today.toDateString();
-  }).length;
-  const todayDiscount = salesRecords
-    .filter((sale) => {
-      const d = parseSaleDate(sale.date);
-      return d !== null && d.toDateString() === today.toDateString();
-    })
-    .reduce((sum, sale) => sum + sale.discount, 0);
+  const dashboardSales = salesRecords.filter((sale) => isWithinReportPeriod(sale.date, dashboardPeriod));
+  const dashboardRevenue = dashboardSales.reduce((sum, sale) => sum + saleTotal(sale), 0);
+  const dashboardSalesCount = dashboardSales.length;
+  const dashboardDiscount = dashboardSales.reduce((sum, sale) => sum + sale.discount, 0);
   const pendingQuotesCount = quoteRecords.filter((q) => q.status === "New").length;
   const activeLabel = navItems.find((item) => item.key === active)?.label ?? "Dashboard";
 
@@ -1522,11 +1513,13 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
 
         {active === "dashboard" ? (
           <DashboardOverview
-            revenue={todayRevenue}
+            revenue={dashboardRevenue}
             lowStockCount={lowStock.length}
-            sales={salesRecords}
-            todaySalesCount={todaySalesCount}
-            todayDiscount={todayDiscount}
+            sales={dashboardSales}
+            salesCount={dashboardSalesCount}
+            discount={dashboardDiscount}
+            period={dashboardPeriod}
+            onPeriodChange={setDashboardPeriod}
             pendingQuotesCount={pendingQuotesCount}
             onNewSale={() => setActive("pos")}
             onAddStock={() => {
@@ -1678,8 +1671,10 @@ function DashboardOverview({
   revenue,
   lowStockCount,
   sales,
-  todaySalesCount,
-  todayDiscount,
+  salesCount,
+  discount,
+  period,
+  onPeriodChange,
   pendingQuotesCount,
   onNewSale,
   onAddStock,
@@ -1689,8 +1684,10 @@ function DashboardOverview({
   revenue: number;
   lowStockCount: number;
   sales: Sale[];
-  todaySalesCount: number;
-  todayDiscount: number;
+  salesCount: number;
+  discount: number;
+  period: ReportPeriod;
+  onPeriodChange: (period: ReportPeriod) => void;
   pendingQuotesCount: number;
   onNewSale: () => void;
   onAddStock: () => void;
@@ -1702,16 +1699,38 @@ function DashboardOverview({
 
   return (
     <section className="dashboard-grid">
-      <MetricCard icon={BadgeDollarSign} label="Revenue today" value={formatGhs(revenue)} tone="green" />
-      <MetricCard icon={ReceiptText} label="Sales today" value={`${todaySalesCount} receipt${todaySalesCount !== 1 ? "s" : ""}`} tone="gold" />
-      <MetricCard icon={CreditCard} label="Discount today" value={todayDiscount > 0 ? formatGhs(todayDiscount) : "—"} tone="blue" />
+      <div className="panel wide-panel dashboard-filter-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Dashboard time filter</p>
+            <h2>{reportPeriodLabel(period)} overview</h2>
+          </div>
+          <CalendarDays size={24} aria-hidden="true" />
+        </div>
+        <div className="form-grid">
+          <label>
+            <span>Time period</span>
+            <select value={period} onChange={(event) => onPeriodChange(event.target.value as ReportPeriod)}>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="this-month">This month</option>
+              <option value="last-30">Last 30 days</option>
+              <option value="all">All time</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <MetricCard icon={BadgeDollarSign} label="Revenue" value={formatGhs(revenue)} tone="green" />
+      <MetricCard icon={ReceiptText} label="Sales" value={`${salesCount} receipt${salesCount !== 1 ? "s" : ""}`} tone="gold" />
+      <MetricCard icon={CreditCard} label="Discounts" value={discount > 0 ? formatGhs(discount) : "—"} tone="blue" />
       <MetricCard icon={ClipboardList} label="Pending quotes" value={`${pendingQuotesCount} open`} tone="blue" />
       <MetricCard icon={Boxes} label="Low stock" value={`${lowStockCount} items`} tone="red" />
 
       <div className="panel chart-panel">
         <div className="panel-heading">
           <div>
-            <p className="eyebrow">6 month view</p>
+            <p className="eyebrow">{reportPeriodLabel(period)} view</p>
             <h2>Revenue trend</h2>
           </div>
           <span className="badge">GHS</span>
@@ -2364,7 +2383,6 @@ function CustomersPanel({
   );
 }
 
-type ReportPeriod = "today" | "yesterday" | "this-month" | "last-30" | "all";
 type ReportKind = "business" | "sales" | "low-stock" | "expenses" | "staff";
 
 function isWithinReportPeriod(dateValue: string, period: ReportPeriod) {

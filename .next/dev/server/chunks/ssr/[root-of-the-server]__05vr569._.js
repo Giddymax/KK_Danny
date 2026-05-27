@@ -41,28 +41,25 @@ __turbopack_context__.s([
     ()=>hasSupabaseEnv
 ]);
 function getSupabaseConfig() {
-    const url = ("TURBOPACK compile-time value", "https://zoaqpykmvdwqgudjhsxo.supabase.co");
-    const key = ("TURBOPACK compile-time value", "sb_publishable_GkJimNIAahp9cACyLxF51Q_wabQoVhA") ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable
+    const url = ("TURBOPACK compile-time value", "");
+    const key = ("TURBOPACK compile-time value", "") ?? ("TURBOPACK compile-time value", "");
+    if ("TURBOPACK compile-time truthy", 1) {
+        return null;
+    }
+    //TURBOPACK unreachable
     ;
-    return {
-        url,
-        key
-    };
 }
 function hasSupabaseEnv() {
     return Boolean(getSupabaseConfig());
 }
 function getSupabaseAdminConfig() {
-    const url = ("TURBOPACK compile-time value", "https://zoaqpykmvdwqgudjhsxo.supabase.co");
+    const url = ("TURBOPACK compile-time value", "");
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY;
-    if (!url || !key) {
+    if ("TURBOPACK compile-time truthy", 1) {
         return null;
     }
-    return {
-        url,
-        key
-    };
+    //TURBOPACK unreachable
+    ;
 }
 }),
 "[project]/src/app/admin/login/login-form.tsx [app-rsc] (client reference proxy) <module evaluation>", ((__turbopack_context__) => {
