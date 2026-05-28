@@ -118,6 +118,7 @@ const inventory = [
         category: "Cement",
         unit: "bag",
         price: 98,
+        costPrice: 82,
         stock: 146,
         threshold: 35,
         supplier: "Adeiso Depot"
@@ -128,6 +129,7 @@ const inventory = [
         category: "Wood",
         unit: "piece",
         price: 42,
+        costPrice: 31,
         stock: 68,
         threshold: 20,
         supplier: "Central Timber"
@@ -138,6 +140,7 @@ const inventory = [
         category: "Steel rods",
         unit: "length",
         price: 115,
+        costPrice: 96,
         stock: 18,
         threshold: 25,
         supplier: "Eastern Steel"
@@ -148,6 +151,7 @@ const inventory = [
         category: "Paint",
         unit: "bucket",
         price: 185,
+        costPrice: 142,
         stock: 32,
         threshold: 12,
         supplier: "Paint House Ghana"
@@ -158,6 +162,7 @@ const inventory = [
         category: "Hardware",
         unit: "box",
         price: 58,
+        costPrice: 43,
         stock: 54,
         threshold: 16,
         supplier: "Hardware Market"
@@ -168,6 +173,7 @@ const inventory = [
         category: "Equipment services",
         unit: "hour",
         price: 220,
+        costPrice: 0,
         stock: 0,
         threshold: 0,
         supplier: "In-house",
@@ -188,13 +194,15 @@ const recentSales = [
                 id: "cement-ghacem",
                 name: "Ghacem Cement",
                 quantity: 12,
-                price: 98
+                price: 98,
+                costPrice: 82
             },
             {
                 id: "nails-4-inch",
                 name: "4 Inch Nails",
                 quantity: 2,
-                price: 58
+                price: 58,
+                costPrice: 43
             }
         ],
         discount: 20,
@@ -213,7 +221,8 @@ const recentSales = [
                 id: "rod-12mm",
                 name: "Reinforcement Rod 12mm",
                 quantity: 15,
-                price: 115
+                price: 115,
+                costPrice: 96
             }
         ],
         discount: 0,
@@ -233,13 +242,15 @@ const recentSales = [
                 id: "paint-savanna",
                 name: "Savanna Paint",
                 quantity: 8,
-                price: 185
+                price: 185,
+                costPrice: 142
             },
             {
                 id: "wood-2x4",
                 name: "Treated Wood 2x4",
                 quantity: 20,
-                price: 42
+                price: 42,
+                costPrice: 31
             }
         ],
         discount: 50,
@@ -448,11 +459,35 @@ const navItems = [
         icon: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$settings$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__Settings$3e$__["Settings"]
     }
 ];
+const staffHiddenSections = new Set([
+    "dashboard",
+    "reports",
+    "staff",
+    "settings"
+]);
+function navForRole(role) {
+    return role === "admin" ? navItems : navItems.filter((item)=>!staffHiddenSections.has(item.key));
+}
 function saleTotal(sale) {
     if (typeof sale.total === "number") {
         return sale.total;
     }
     return sale.items.reduce((sum, item)=>sum + item.price * item.quantity, 0) - sale.discount;
+}
+function saleCost(sale) {
+    return sale.items.reduce((sum, item)=>{
+        const unitCost = Number.isFinite(Number(item.costPrice)) ? Number(item.costPrice) : item.price;
+        return sum + unitCost * item.quantity;
+    }, 0);
+}
+function saleProfit(sale) {
+    return saleTotal(sale) - saleCost(sale);
+}
+function profitMargin(profit, revenue) {
+    return revenue > 0 ? profit / revenue * 100 : 0;
+}
+function formatPercent(value) {
+    return `${value.toFixed(1)}%`;
 }
 function parseSaleDate(dateStr) {
     if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
@@ -496,6 +531,7 @@ function inventoryRowToItem(row) {
         category: row.category,
         unit: row.unit,
         price: Number(row.price),
+        costPrice: Number.isFinite(Number(row.cost_price)) ? Number(row.cost_price) : Number(row.price),
         stock: Number(row.stock),
         threshold: Number(row.threshold),
         supplier: row.supplier ?? "",
@@ -508,6 +544,7 @@ function inventoryItemToForm(item) {
         category: item?.category ?? "",
         unit: item?.unit ?? "item",
         price: String(item?.price ?? ""),
+        costPrice: String(item?.costPrice ?? item?.price ?? ""),
         stock: String(item?.stock ?? "0"),
         threshold: String(item?.threshold ?? "0"),
         supplier: item?.supplier ?? "",
@@ -548,8 +585,35 @@ function sameItemName(left, right) {
 function makeDemoId(prefix) {
     return `${prefix}-${Date.now()}`;
 }
+function formatQuoteNumber(value) {
+    return `QT-${String(Math.max(value, 1)).padStart(3, "0")}`;
+}
+function quoteNumberValue(quote) {
+    const fromNumber = quote.quoteNumber.match(/^QT-(\d+)$/i);
+    if (fromNumber) {
+        return Number(fromNumber[1]);
+    }
+    const fromDemoId = quote.id.match(/^quote-(\d+)$/i);
+    if (fromDemoId) {
+        return Number(fromDemoId[1]) + 1;
+    }
+    return 0;
+}
+function nextQuoteNumber(quotes) {
+    const maxValue = quotes.reduce((max, quote)=>Math.max(max, quoteNumberValue(quote)), 0);
+    return formatQuoteNumber(maxValue + 1);
+}
 function titleCaseStatus(value) {
     return value.split("_").map((part)=>part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+}
+function saleItemRowsToCart(items) {
+    return (items ?? []).filter((item)=>typeof item?.item_name === "string" && item.item_name.trim()).map((item)=>({
+            id: item.id,
+            name: item.item_name,
+            quantity: Number.isFinite(Number(item.quantity)) ? Number(item.quantity) : 1,
+            price: Number.isFinite(Number(item.unit_price)) ? Number(item.unit_price) : 0,
+            costPrice: Number.isFinite(Number(item.unit_cost)) ? Number(item.unit_cost) : Number(item.unit_price) || 0
+        }));
 }
 function isLegacyReceiptCopyNote(value) {
     return value?.trim().toLowerCase() === [
@@ -570,11 +634,13 @@ function parseQuoteDetails(value) {
                 id: item.id,
                 name: item.name,
                 quantity: Number.isFinite(Number(item.quantity)) ? Number(item.quantity) : 1,
-                price: Number.isFinite(Number(item.price)) ? Number(item.price) : 0
+                price: Number.isFinite(Number(item.price)) ? Number(item.price) : 0,
+                costPrice: Number.isFinite(Number(item.costPrice)) ? Number(item.costPrice) : Number(item.price) || 0
             })) : [];
         return {
             totalAmount: Number.isFinite(Number(parsed.totalAmount)) ? Number(parsed.totalAmount) : 0,
-            items
+            items,
+            quoteNumber: typeof parsed.quoteNumber === "string" ? parsed.quoteNumber : undefined
         };
     } catch  {
         return {
@@ -596,7 +662,8 @@ function quoteRecordToCart(quote) {
             id: `quote-${index}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
             name,
             quantity: quantities[index] ?? 1,
-            price: index === 0 && quote.totalAmount > 0 ? quote.totalAmount / (quantities[index] || 1) : 0
+            price: index === 0 && quote.totalAmount > 0 ? quote.totalAmount / (quantities[index] || 1) : 0,
+            costPrice: 0
         }));
 }
 function saleToFields(sale) {
@@ -927,8 +994,13 @@ function settingsToFields(settings) {
         }
     ];
 }
-function AdminDashboard({ userEmail, userName, isDemo }) {
-    const [active, setActive] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])("dashboard");
+function AdminDashboard({ userEmail, userName, userRole, isDemo }) {
+    const isAdmin = userRole === "admin";
+    const visibleNavItems = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useMemo"])(()=>navForRole(userRole), [
+        userRole
+    ]);
+    const defaultSection = visibleNavItems[0]?.key ?? "pos";
+    const [active, setActive] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(defaultSection);
     const [sidebarOpen, setSidebarOpen] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(false);
     const [cart, setCart] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])([]);
     const [customer, setCustomer] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])("Walk-in");
@@ -956,7 +1028,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
             name: item.name,
             category: item.supplier,
             quantity: item.stock,
-            unitCost: item.price,
+            unitCost: item.costPrice,
             date: "2026-05-19",
             active: true
         })) : []);
@@ -971,6 +1043,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
         })) : []);
     const [quoteRecords, setQuoteRecords] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(isDemo ? __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$demo$2d$data$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["quotes"].map((quote, index)=>({
             id: `quote-${index}`,
+            quoteNumber: formatQuoteNumber(index + 1),
             customer: quote.customer,
             phone: quote.phone,
             request: quote.request,
@@ -1029,10 +1102,21 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
     const lowStock = inventoryItems.filter((item)=>!item.isService && item.stock <= item.threshold);
     const dashboardSales = salesRecords.filter((sale)=>isWithinReportPeriod(sale.date, dashboardPeriod));
     const dashboardRevenue = dashboardSales.reduce((sum, sale)=>sum + saleTotal(sale), 0);
+    const dashboardProfit = dashboardSales.reduce((sum, sale)=>sum + saleProfit(sale), 0);
+    const dashboardMargin = profitMargin(dashboardProfit, dashboardRevenue);
     const dashboardSalesCount = dashboardSales.length;
     const dashboardDiscount = dashboardSales.reduce((sum, sale)=>sum + sale.discount, 0);
     const pendingQuotesCount = quoteRecords.filter((q)=>q.status === "New").length;
-    const activeLabel = navItems.find((item)=>item.key === active)?.label ?? "Dashboard";
+    const activeLabel = visibleNavItems.find((item)=>item.key === active)?.label ?? visibleNavItems[0]?.label ?? "POS";
+    (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useEffect"])(()=>{
+        if (!visibleNavItems.some((item)=>item.key === active)) {
+            setActive(defaultSection);
+        }
+    }, [
+        active,
+        defaultSection,
+        visibleNavItems
+    ]);
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useEffect"])(()=>{
         if (!isDemo) {
             return;
@@ -1054,7 +1138,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
             if (!supabase) {
                 return;
             }
-            const { data, error } = await supabase.from("inventory_items").select("id,name,category,unit,price,stock,threshold,supplier,is_service").eq("active", true).order("name", {
+            const { data, error } = await supabase.from("inventory_items").select("id,name,category,unit,price,cost_price,stock,threshold,supplier,is_service").eq("active", true).order("name", {
                 ascending: true
             });
             if (ignore) {
@@ -1082,7 +1166,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                 supabase.from("customers").select("id,name,phone,balance,visits,active").eq("active", true).order("name", {
                     ascending: true
                 }),
-                supabase.from("sales").select("id,sale_ref,customer_name,customer_phone,payment_method,status,total,amount_paid,discount,notes,created_at,active").eq("active", true).order("created_at", {
+                supabase.from("sales").select("id,sale_ref,customer_name,customer_phone,payment_method,status,total,amount_paid,discount,notes,created_at,active,sale_items(id,item_name,quantity,unit_price,unit_cost)").eq("active", true).order("created_at", {
                     ascending: false
                 }),
                 supabase.from("profiles").select("id,email,full_name,role,is_active").order("email", {
@@ -1125,10 +1209,12 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                     })));
             }
             if (quotesResult.data) {
-                setQuoteRecords(quotesResult.data.map((row)=>{
+                const quoteRows = quotesResult.data;
+                setQuoteRecords(quoteRows.map((row, index)=>{
                     const details = parseQuoteDetails(row.details);
                     return {
                         id: row.id,
+                        quoteNumber: details.quoteNumber ?? formatQuoteNumber(quoteRows.length - index),
                         customer: row.customer_name,
                         phone: row.phone,
                         request: row.requested_items,
@@ -1162,7 +1248,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                         method: row.payment_method,
                         staff: row.notes && !isLegacyReceiptCopyNote(row.notes) ? row.notes : userName,
                         status: row.status === "part_paid" ? "Part paid" : row.status === "overpaid" ? "Overpaid" : "Paid",
-                        items: [],
+                        items: saleItemRowsToCart(row.sale_items),
                         discount: Number(row.discount),
                         paid: Number(row.amount_paid),
                         total: Number(row.total),
@@ -1223,13 +1309,18 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                     id: item.id,
                     name: item.name,
                     quantity: 1,
-                    price: item.price
+                    price: item.price,
+                    costPrice: item.costPrice
                 }
             ];
         });
         setManagedStatus("");
     }
     function openInventoryForm(item) {
+        if (!isAdmin) {
+            setInventoryStatus("Only admin accounts can change inventory items.");
+            return;
+        }
         setEditingItem(item ?? null);
         setInventoryForm(inventoryItemToForm(item));
         setInventoryStatus("");
@@ -1248,10 +1339,11 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
         const category = inventoryForm.category.trim();
         const unit = inventoryForm.unit.trim() || "item";
         const price = Number(inventoryForm.price);
+        const costPrice = Number(inventoryForm.costPrice);
         const stock = Number(inventoryForm.stock);
         const threshold = Number(inventoryForm.threshold);
-        if (!name || !category || !Number.isFinite(price) || !Number.isFinite(stock) || !Number.isFinite(threshold)) {
-            setInventoryStatus("Enter a name, category, and valid numbers for price, stock, and threshold.");
+        if (!name || !category || !Number.isFinite(price) || !Number.isFinite(costPrice) || !Number.isFinite(stock) || !Number.isFinite(threshold)) {
+            setInventoryStatus("Enter a name, category, and valid numbers for selling price, cost price, stock, and threshold.");
             return;
         }
         const item = {
@@ -1260,6 +1352,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
             category,
             unit,
             price: Math.max(price, 0),
+            costPrice: Math.max(costPrice, 0),
             stock: Math.max(stock, 0),
             threshold: Math.max(threshold, 0),
             supplier: inventoryForm.supplier.trim(),
@@ -1289,13 +1382,14 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
             category: item.category,
             unit: item.unit,
             price: item.price,
+            cost_price: item.costPrice,
             stock: item.stock,
             threshold: item.threshold,
             supplier: item.supplier,
             is_service: item.isService ?? false,
             active: true
         };
-        const query = editingItem ? supabase.from("inventory_items").update(payload).eq("id", editingItem.id).select("id,name,category,unit,price,stock,threshold,supplier,is_service").single() : supabase.from("inventory_items").insert(payload).select("id,name,category,unit,price,stock,threshold,supplier,is_service").single();
+        const query = editingItem ? supabase.from("inventory_items").update(payload).eq("id", editingItem.id).select("id,name,category,unit,price,cost_price,stock,threshold,supplier,is_service").single() : supabase.from("inventory_items").insert(payload).select("id,name,category,unit,price,cost_price,stock,threshold,supplier,is_service").single();
         const { data, error } = await query;
         setInventoryPending(false);
         if (error) {
@@ -1313,6 +1407,10 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
         setInventoryForm(inventoryItemToForm());
     }
     async function deleteInventoryItem(item) {
+        if (!isAdmin) {
+            setInventoryStatus("Only admin accounts can delete inventory items.");
+            return;
+        }
         const confirmed = window.confirm(`Delete ${item.name} from inventory?`);
         if (!confirmed) {
             return;
@@ -1340,6 +1438,14 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
         setInventoryStatus("Inventory item deleted.");
     }
     function openManagedEditor(kind, itemId) {
+        if (!isAdmin && itemId) {
+            setManagedStatus("Only admin accounts can edit records.");
+            return;
+        }
+        if (!isAdmin && (kind === "staff" || kind === "settings")) {
+            setManagedStatus("Only admin accounts can access that section.");
+            return;
+        }
         const titlePrefix = itemId ? "Edit" : "Add";
         if (kind === "sale") {
             const sale = salesRecords.find((entry)=>entry.ref === itemId);
@@ -1415,6 +1521,10 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
         setManagedStatus("");
     }
     function openQuoteEditor(quote) {
+        if (!isAdmin && quote) {
+            setManagedStatus("Only admin accounts can edit quotes.");
+            return;
+        }
         setEditingQuote(quote ?? null);
         setQuoteCustomer(quote?.customer ?? "");
         setQuotePhone(quote?.phone ?? "");
@@ -1447,7 +1557,8 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                     id: item.id,
                     name: item.name,
                     quantity: 1,
-                    price: item.price
+                    price: item.price,
+                    costPrice: item.costPrice
                 }
             ];
         });
@@ -1475,6 +1586,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
         const totalAmount = quoteCart.reduce((sum, item)=>sum + item.quantity * item.price, 0);
         const quote = {
             id: editingQuote?.id ?? makeDemoId("quote"),
+            quoteNumber: editingQuote?.quoteNumber ?? nextQuoteNumber(quoteRecords),
             customer: quoteCustomer.trim() || "Customer",
             phone: quotePhone.trim(),
             request: quoteCart.map((item)=>item.name).join(", "),
@@ -1498,6 +1610,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                     requested_items: quote.request,
                     quantity: quote.quantity,
                     details: JSON.stringify({
+                        quoteNumber: quote.quoteNumber,
                         totalAmount: quote.totalAmount,
                         items: quote.items
                     }),
@@ -1541,6 +1654,16 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
     }
     async function saveManagedRecord() {
         if (!managedEditor) {
+            return;
+        }
+        if (!isAdmin && managedEditor.itemId) {
+            setManagedStatus("Only admin accounts can edit records.");
+            setManagedPending(false);
+            return;
+        }
+        if (!isAdmin && (managedEditor.kind === "staff" || managedEditor.kind === "settings")) {
+            setManagedStatus("Only admin accounts can access that section.");
+            setManagedPending(false);
             return;
         }
         const fields = managedEditor.fields;
@@ -1653,6 +1776,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                 } else {
                     await adjustInventoryByItemName(purchase.name, purchase.quantity);
                 }
+                await updateInventoryCostByItemName(purchase.name, purchase.unitCost);
                 setPurchaseRecords((current)=>managedEditor.itemId ? current.map((entry)=>entry.id === managedEditor.itemId ? purchase : entry) : [
                         purchase,
                         ...current
@@ -1688,8 +1812,10 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                     ]);
             }
             if (managedEditor.kind === "quote") {
+                const existingQuote = managedEditor.itemId ? quoteRecords.find((entry)=>entry.id === managedEditor.itemId) : undefined;
                 const quote = {
                     id: managedEditor.itemId ?? makeDemoId("quote"),
+                    quoteNumber: existingQuote?.quoteNumber ?? nextQuoteNumber(quoteRecords),
                     customer: fieldValue(fields, "customer"),
                     phone: fieldValue(fields, "phone"),
                     request: fieldValue(fields, "request"),
@@ -1704,7 +1830,11 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                         phone: quote.phone,
                         requested_items: quote.request,
                         quantity: quote.quantity,
-                        details: String(quote.totalAmount),
+                        details: JSON.stringify({
+                            quoteNumber: quote.quoteNumber,
+                            totalAmount: quote.totalAmount,
+                            items: quote.items ?? []
+                        }),
                         status: quote.status.toLowerCase().replace(" ", "_"),
                         active: quote.active
                     };
@@ -1819,11 +1949,19 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
         }
     }
     async function deleteManagedRecord(kind, itemId, label) {
+        if (!isAdmin) {
+            setManagedStatus("Only admin accounts can delete records.");
+            return;
+        }
         if (!window.confirm(`Delete ${label}?`)) {
             return;
         }
         const supabase = isDemo ? null : (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$browser$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["createBrowserSupabaseClient"])();
+        const saleToDelete = kind === "sale" ? salesRecords.find((entry)=>entry.ref === itemId) : undefined;
         try {
+            if (saleToDelete) {
+                await restoreInventoryForDeletedSale(saleToDelete);
+            }
             if (supabase) {
                 if (kind === "supplier") {
                     const { error } = await supabase.from("suppliers").delete().eq("id", itemId);
@@ -1940,7 +2078,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
         }
         const { data, error } = await supabase.from("inventory_items").update({
             stock
-        }).eq("id", itemId).select("id,name,category,unit,price,stock,threshold,supplier,is_service").single();
+        }).eq("id", itemId).select("id,name,category,unit,price,cost_price,stock,threshold,supplier,is_service").single();
         if (error) {
             throw error;
         }
@@ -1955,6 +2093,65 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
             return;
         }
         await updateInventoryStock(item.id, item.stock + quantityDelta);
+    }
+    async function updateInventoryCostByItemName(itemName, nextCostPrice) {
+        if (!itemName.trim() || !Number.isFinite(nextCostPrice) || nextCostPrice <= 0) {
+            return;
+        }
+        const item = inventoryItems.find((entry)=>sameItemName(entry.name, itemName));
+        if (!item || item.isService) {
+            return;
+        }
+        const costPrice = Math.max(nextCostPrice, 0);
+        if (isDemo) {
+            setInventoryItems((current)=>{
+                const next = current.map((entry)=>entry.id === item.id ? {
+                        ...entry,
+                        costPrice
+                    } : entry);
+                writeStoredDemoInventory(next);
+                return next;
+            });
+            return;
+        }
+        const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$browser$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["createBrowserSupabaseClient"])();
+        if (!supabase) {
+            throw new Error("Supabase keys are not set.");
+        }
+        const { data, error } = await supabase.from("inventory_items").update({
+            cost_price: costPrice
+        }).eq("id", item.id).select("id,name,category,unit,price,cost_price,stock,threshold,supplier,is_service").single();
+        if (error) {
+            throw error;
+        }
+        setInventoryItems((current)=>current.map((entry)=>entry.id === item.id ? inventoryRowToItem(data) : entry));
+    }
+    async function restoreInventoryForDeletedSale(sale) {
+        if (!sale.items.length) {
+            return;
+        }
+        const restores = new Map();
+        for (const line of sale.items){
+            const quantity = Number(line.quantity);
+            if (!Number.isFinite(quantity) || quantity <= 0) {
+                continue;
+            }
+            const inventoryItem = inventoryItems.find((entry)=>entry.id === line.id) ?? inventoryItems.find((entry)=>sameItemName(entry.name, line.name));
+            if (!inventoryItem || inventoryItem.isService) {
+                continue;
+            }
+            const existing = restores.get(inventoryItem.id);
+            restores.set(inventoryItem.id, {
+                item: inventoryItem,
+                quantity: (existing?.quantity ?? 0) + quantity
+            });
+        }
+        if (!restores.size) {
+            return;
+        }
+        for (const restore of restores.values()){
+            await updateInventoryStock(restore.item.id, restore.item.stock + restore.quantity);
+        }
     }
     async function createReceipt() {
         const now = new Date();
@@ -2005,6 +2202,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                         item_name: item.name,
                         quantity: item.quantity,
                         unit_price: item.price,
+                        unit_cost: item.costPrice ?? item.price,
                         line_total: item.quantity * item.price
                     })));
                 if (itemsError) {
@@ -2060,7 +2258,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                                 height: 54
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 1689,
+                                lineNumber: 1940,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2069,20 +2267,20 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                                         children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["brand"].shortName
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 1691,
+                                        lineNumber: 1942,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                         children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["brand"].tagline
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 1692,
+                                        lineNumber: 1943,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 1690,
+                                lineNumber: 1941,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -2095,24 +2293,24 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                                     size: 18
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 1701,
+                                    lineNumber: 1952,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 1694,
+                                lineNumber: 1945,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1688,
+                        lineNumber: 1939,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("nav", {
                         className: "side-nav",
                         "aria-label": "Admin navigation",
-                        children: navItems.map((item)=>{
+                        children: visibleNavItems.map((item)=>{
                             const Icon = item.icon;
                             return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                                 type: "button",
@@ -2126,26 +2324,26 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                                         size: 18
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 1718,
+                                        lineNumber: 1969,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                         children: item.label
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 1719,
+                                        lineNumber: 1970,
                                         columnNumber: 17
                                     }, this)
                                 ]
                             }, item.key, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 1709,
+                                lineNumber: 1960,
                                 columnNumber: 15
                             }, this);
                         })
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1705,
+                        lineNumber: 1956,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2155,26 +2353,26 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                                 size: 18
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 1726,
+                                lineNumber: 1977,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                 children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["brand"].location
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 1727,
+                                lineNumber: 1978,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1725,
+                        lineNumber: 1976,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 1687,
+                lineNumber: 1938,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
@@ -2196,12 +2394,12 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                                             size: 20
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 1741,
+                                            lineNumber: 1992,
                                             columnNumber: 15
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 1734,
+                                        lineNumber: 1985,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2211,26 +2409,26 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                                                 children: "Admin / Staff Dashboard"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 1744,
+                                                lineNumber: 1995,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h1", {
                                                 children: activeLabel
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 1745,
+                                                lineNumber: 1996,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 1743,
+                                        lineNumber: 1994,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 1733,
+                                lineNumber: 1984,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2244,7 +2442,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                                                 "aria-hidden": "true"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 1751,
+                                                lineNumber: 2002,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -2252,13 +2450,13 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                                                 placeholder: "Search stock, receipt, customer"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 1752,
+                                                lineNumber: 2003,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 1750,
+                                        lineNumber: 2001,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2268,20 +2466,27 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                                                 children: isDemo ? "Demo preview" : "Signed in"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 1755,
+                                                lineNumber: 2006,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
                                                 children: userEmail
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 1756,
+                                                lineNumber: 2007,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
+                                                children: userRole
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/app/admin/dashboard.tsx",
+                                                lineNumber: 2008,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 1754,
+                                        lineNumber: 2005,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -2294,24 +2499,24 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                                             size: 18
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 1765,
+                                            lineNumber: 2017,
                                             columnNumber: 15
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 1758,
+                                        lineNumber: 2010,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 1749,
+                                lineNumber: 2000,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1732,
+                        lineNumber: 1983,
                         columnNumber: 9
                     }, this),
                     isDemo ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2320,7 +2525,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                         children: "Supabase is not connected yet, so this dashboard is running with local demo data. Add `.env.local` keys to enable real authentication and database reads."
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1771,
+                        lineNumber: 2023,
                         columnNumber: 11
                     }, this) : null,
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2331,38 +2536,40 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                                     children: "Section"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 1779,
+                                    lineNumber: 2031,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
                                     value: active,
                                     onChange: (event)=>setActive(event.target.value),
-                                    children: navItems.map((item)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
+                                    children: visibleNavItems.map((item)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
                                             value: item.key,
                                             children: item.label
                                         }, item.key, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 1782,
+                                            lineNumber: 2034,
                                             columnNumber: 17
                                         }, this))
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 1780,
+                                    lineNumber: 2032,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 1778,
+                            lineNumber: 2030,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1777,
+                        lineNumber: 2029,
                         columnNumber: 9
                     }, this),
-                    active === "dashboard" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(DashboardOverview, {
+                    isAdmin && active === "dashboard" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(DashboardOverview, {
                         revenue: dashboardRevenue,
+                        profit: dashboardProfit,
+                        margin: dashboardMargin,
                         lowStockCount: lowStock.length,
                         sales: dashboardSales,
                         salesCount: dashboardSalesCount,
@@ -2382,7 +2589,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                         onReprintReceipt: ()=>setActive("sales")
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1791,
+                        lineNumber: 2043,
                         columnNumber: 11
                     }, this) : null,
                     active === "pos" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(PosPanel, {
@@ -2409,7 +2616,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                         inventoryItems: inventoryItems
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1813,
+                        lineNumber: 2067,
                         columnNumber: 11
                     }, this) : null,
                     managedStatus ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2418,83 +2625,83 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                         children: managedStatus
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1838,
+                        lineNumber: 2092,
                         columnNumber: 11
                     }, this) : null,
                     active === "sales" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SalesPanel, {
                         sales: salesRecords,
                         onAdd: ()=>setActive("pos"),
-                        onEdit: (sale)=>openManagedEditor("sale", sale.ref),
-                        onDelete: (sale)=>deleteManagedRecord("sale", sale.ref, sale.ref),
+                        onEdit: isAdmin ? (sale)=>openManagedEditor("sale", sale.ref) : undefined,
+                        onDelete: isAdmin ? (sale)=>deleteManagedRecord("sale", sale.ref, sale.ref) : undefined,
                         onReceipt: openSaleReceipt
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1843,
+                        lineNumber: 2097,
                         columnNumber: 11
                     }, this) : null,
                     active === "inventory" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(InventoryPanel, {
                         items: inventoryItems,
                         status: inventoryStatus,
-                        onAdd: ()=>openInventoryForm(),
-                        onEdit: openInventoryForm,
-                        onDelete: deleteInventoryItem
+                        onAdd: isAdmin ? ()=>openInventoryForm() : undefined,
+                        onEdit: isAdmin ? openInventoryForm : undefined,
+                        onDelete: isAdmin ? deleteInventoryItem : undefined
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1852,
+                        lineNumber: 2106,
                         columnNumber: 11
                     }, this) : null,
                     active === "suppliers" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SuppliersPanel, {
                         rows: supplierRecords,
-                        onAdd: ()=>openManagedEditor("supplier"),
-                        onEdit: (row)=>openManagedEditor("supplier", row.id),
-                        onDelete: (row)=>deleteManagedRecord("supplier", row.id, row.name)
+                        onAdd: isAdmin ? ()=>openManagedEditor("supplier") : undefined,
+                        onEdit: isAdmin ? (row)=>openManagedEditor("supplier", row.id) : undefined,
+                        onDelete: isAdmin ? (row)=>deleteManagedRecord("supplier", row.id, row.name) : undefined
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1861,
+                        lineNumber: 2115,
                         columnNumber: 11
                     }, this) : null,
                     active === "purchases" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(PurchasesPanel, {
                         rows: purchaseRecords,
-                        onAdd: ()=>openManagedEditor("purchase"),
-                        onEdit: (row)=>openManagedEditor("purchase", row.id),
-                        onDelete: (row)=>deleteManagedRecord("purchase", row.id, row.name)
+                        onAdd: isAdmin ? ()=>openManagedEditor("purchase") : undefined,
+                        onEdit: isAdmin ? (row)=>openManagedEditor("purchase", row.id) : undefined,
+                        onDelete: isAdmin ? (row)=>deleteManagedRecord("purchase", row.id, row.name) : undefined
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1869,
+                        lineNumber: 2123,
                         columnNumber: 11
                     }, this) : null,
                     active === "expenses" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ExpensesPanel, {
                         rows: expenseRecords,
-                        onAdd: ()=>openManagedEditor("expense"),
-                        onEdit: (row)=>openManagedEditor("expense", row.id),
-                        onDelete: (row)=>deleteManagedRecord("expense", row.id, row.category)
+                        onAdd: isAdmin ? ()=>openManagedEditor("expense") : undefined,
+                        onEdit: isAdmin ? (row)=>openManagedEditor("expense", row.id) : undefined,
+                        onDelete: isAdmin ? (row)=>deleteManagedRecord("expense", row.id, row.category) : undefined
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1877,
+                        lineNumber: 2131,
                         columnNumber: 11
                     }, this) : null,
                     active === "quotes" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(QuotesPanel, {
                         rows: quoteRecords,
                         onAdd: ()=>openQuoteEditor(),
-                        onEdit: openQuoteEditor,
-                        onDelete: (row)=>deleteManagedRecord("quote", row.id, row.customer),
+                        onEdit: isAdmin ? openQuoteEditor : undefined,
+                        onDelete: isAdmin ? (row)=>deleteManagedRecord("quote", row.id, row.customer) : undefined,
                         onPrint: setQuotePreview
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1885,
+                        lineNumber: 2139,
                         columnNumber: 11
                     }, this) : null,
                     active === "customers" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(CustomersPanel, {
                         rows: customerRecords,
-                        onAdd: ()=>openManagedEditor("customer"),
-                        onEdit: (row)=>openManagedEditor("customer", row.id),
-                        onDelete: (row)=>deleteManagedRecord("customer", row.id, row.name)
+                        onAdd: isAdmin ? ()=>openManagedEditor("customer") : undefined,
+                        onEdit: isAdmin ? (row)=>openManagedEditor("customer", row.id) : undefined,
+                        onDelete: isAdmin ? (row)=>deleteManagedRecord("customer", row.id, row.name) : undefined
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1894,
+                        lineNumber: 2148,
                         columnNumber: 11
                     }, this) : null,
-                    active === "reports" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ReportsPanel, {
+                    isAdmin && active === "reports" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ReportsPanel, {
                         inventoryItems: inventoryItems,
                         salesRecords: salesRecords,
                         expenseRecords: expenseRecords,
@@ -2502,31 +2709,31 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                         staffRecords: staffRecords
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1902,
+                        lineNumber: 2156,
                         columnNumber: 11
                     }, this) : null,
-                    active === "staff" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(StaffPanel, {
+                    isAdmin && active === "staff" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(StaffPanel, {
                         rows: staffRecords,
                         onAdd: ()=>openManagedEditor("staff"),
                         onEdit: (row)=>openManagedEditor("staff", row.id),
                         onDelete: (row)=>deleteManagedRecord("staff", row.id, row.name)
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1911,
+                        lineNumber: 2165,
                         columnNumber: 11
                     }, this) : null,
-                    active === "settings" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SettingsPanel, {
+                    isAdmin && active === "settings" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(SettingsPanel, {
                         settings: settingsRecord,
                         onEdit: ()=>openManagedEditor("settings")
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1918,
-                        columnNumber: 34
+                        lineNumber: 2172,
+                        columnNumber: 45
                     }, this) : null
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 1731,
+                lineNumber: 1982,
                 columnNumber: 7
             }, this),
             receipt ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ReceiptModal, {
@@ -2534,7 +2741,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                 onClose: ()=>setReceipt(null)
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 1921,
+                lineNumber: 2175,
                 columnNumber: 18
             }, this) : null,
             quotePreview ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(QuotePrintModal, {
@@ -2542,7 +2749,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                 onClose: ()=>setQuotePreview(null)
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 1922,
+                lineNumber: 2176,
                 columnNumber: 23
             }, this) : null,
             quoteEditorOpen ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(QuoteCartEditor, {
@@ -2563,7 +2770,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                 onSave: saveQuoteRecord
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 1924,
+                lineNumber: 2178,
                 columnNumber: 9
             }, this) : null,
             inventoryFormOpen ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(InventoryEditor, {
@@ -2575,7 +2782,7 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                 onSave: saveInventoryItem
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 1943,
+                lineNumber: 2197,
                 columnNumber: 9
             }, this) : null,
             managedEditor ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ManagedEditor, {
@@ -2586,17 +2793,17 @@ function AdminDashboard({ userEmail, userName, isDemo }) {
                 onSave: saveManagedRecord
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 1953,
+                lineNumber: 2207,
                 columnNumber: 9
             }, this) : null
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 1686,
+        lineNumber: 1937,
         columnNumber: 5
     }, this);
 }
-function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount, period, onPeriodChange, pendingQuotesCount, onNewSale, onAddStock, onCreateQuote, onReprintReceipt }) {
+function DashboardOverview({ revenue, profit, margin, lowStockCount, sales, salesCount, discount, period, onPeriodChange, pendingQuotesCount, onNewSale, onAddStock, onCreateQuote, onReprintReceipt }) {
     const bars = computeRevenueBars(sales);
     const maxRevenue = Math.max(...bars.map((bar)=>bar.value), 1);
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
@@ -2615,7 +2822,7 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                         children: "Dashboard time filter"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2000,
+                                        lineNumber: 2258,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
@@ -2625,13 +2832,13 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2001,
+                                        lineNumber: 2259,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 1999,
+                                lineNumber: 2257,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$calendar$2d$days$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__CalendarDays$3e$__["CalendarDays"], {
@@ -2639,13 +2846,13 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                 "aria-hidden": "true"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2003,
+                                lineNumber: 2261,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 1998,
+                        lineNumber: 2256,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2656,7 +2863,7 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                     children: "Time period"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2007,
+                                    lineNumber: 2265,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -2668,7 +2875,7 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                             children: "Today"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2009,
+                                            lineNumber: 2267,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -2676,7 +2883,7 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                             children: "Yesterday"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2010,
+                                            lineNumber: 2268,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -2684,7 +2891,7 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                             children: "This month"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2011,
+                                            lineNumber: 2269,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -2692,7 +2899,7 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                             children: "Last 30 days"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2012,
+                                            lineNumber: 2270,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -2700,30 +2907,30 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                             children: "All time"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2013,
+                                            lineNumber: 2271,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2008,
+                                    lineNumber: 2266,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2006,
+                            lineNumber: 2264,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2005,
+                        lineNumber: 2263,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 1997,
+                lineNumber: 2255,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
@@ -2733,7 +2940,27 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                 tone: "green"
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2019,
+                lineNumber: 2277,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
+                icon: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$badge$2d$dollar$2d$sign$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__BadgeDollarSign$3e$__["BadgeDollarSign"],
+                label: "Gross profit",
+                value: revenue > 0 ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(profit) : "—",
+                tone: "green"
+            }, void 0, false, {
+                fileName: "[project]/src/app/admin/dashboard.tsx",
+                lineNumber: 2278,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
+                icon: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$badge$2d$dollar$2d$sign$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__BadgeDollarSign$3e$__["BadgeDollarSign"],
+                label: "Profit margin",
+                value: revenue > 0 ? formatPercent(margin) : "—",
+                tone: "blue"
+            }, void 0, false, {
+                fileName: "[project]/src/app/admin/dashboard.tsx",
+                lineNumber: 2279,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
@@ -2743,7 +2970,7 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                 tone: "gold"
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2020,
+                lineNumber: 2280,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
@@ -2753,7 +2980,7 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                 tone: "blue"
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2021,
+                lineNumber: 2281,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
@@ -2763,7 +2990,7 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                 tone: "blue"
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2022,
+                lineNumber: 2282,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
@@ -2773,7 +3000,7 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                 tone: "red"
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2023,
+                lineNumber: 2283,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2792,20 +3019,20 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2028,
+                                        lineNumber: 2288,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                         children: "Revenue trend"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2029,
+                                        lineNumber: 2289,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2027,
+                                lineNumber: 2287,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -2813,13 +3040,13 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                 children: "GHS"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2031,
+                                lineNumber: 2291,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2026,
+                        lineNumber: 2286,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2836,43 +3063,43 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                             }
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2037,
+                                            lineNumber: 2297,
                                             columnNumber: 17
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2036,
+                                        lineNumber: 2296,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
                                         children: bar.label
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2039,
+                                        lineNumber: 2299,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("small", {
                                         children: bar.value > 0 ? `${Math.round(bar.value / 1000)}k` : "—"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2040,
+                                        lineNumber: 2300,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, bar.label, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2035,
+                                lineNumber: 2295,
                                 columnNumber: 13
                             }, this))
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2033,
+                        lineNumber: 2293,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2025,
+                lineNumber: 2285,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2887,25 +3114,25 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                     children: "Quick actions"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2049,
+                                    lineNumber: 2309,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                     children: "Daily shop work"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2050,
+                                    lineNumber: 2310,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2048,
+                            lineNumber: 2308,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2047,
+                        lineNumber: 2307,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2919,14 +3146,14 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                         size: 18
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2055,
+                                        lineNumber: 2315,
                                         columnNumber: 13
                                     }, this),
                                     " New sale"
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2054,
+                                lineNumber: 2314,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -2937,14 +3164,14 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                         size: 18
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2058,
+                                        lineNumber: 2318,
                                         columnNumber: 13
                                     }, this),
                                     " Add stock"
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2057,
+                                lineNumber: 2317,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -2955,14 +3182,14 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                         size: 18
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2061,
+                                        lineNumber: 2321,
                                         columnNumber: 13
                                     }, this),
                                     " Create quote"
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2060,
+                                lineNumber: 2320,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -2973,26 +3200,26 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                         size: 18
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2064,
+                                        lineNumber: 2324,
                                         columnNumber: 13
                                     }, this),
                                     " Reprint receipt"
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2063,
+                                lineNumber: 2323,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2053,
+                        lineNumber: 2313,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2046,
+                lineNumber: 2306,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3007,44 +3234,44 @@ function DashboardOverview({ revenue, lowStockCount, sales, salesCount, discount
                                     children: "Recent activity"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2072,
+                                    lineNumber: 2332,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                     children: "Latest sales"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2073,
+                                    lineNumber: 2333,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2071,
+                            lineNumber: 2331,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2070,
+                        lineNumber: 2330,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ResponsiveSalesTable, {
                         sales: sales
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2076,
+                        lineNumber: 2336,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2069,
+                lineNumber: 2329,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 1996,
+        lineNumber: 2254,
         columnNumber: 5
     }, this);
 }
@@ -3058,32 +3285,32 @@ function MetricCard({ icon: Icon, label, value, tone }) {
                     size: 22
                 }, void 0, false, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 2096,
+                    lineNumber: 2356,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2095,
+                lineNumber: 2355,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                 children: label
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2098,
+                lineNumber: 2358,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
                 children: value
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2099,
+                lineNumber: 2359,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 2094,
+        lineNumber: 2354,
         columnNumber: 5
     }, this);
 }
@@ -3103,25 +3330,25 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                     children: "Products & services"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2154,
+                                    lineNumber: 2414,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                     children: "Add items"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2155,
+                                    lineNumber: 2415,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2153,
+                            lineNumber: 2413,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2152,
+                        lineNumber: 2412,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3135,14 +3362,14 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         children: item.category
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2161,
+                                        lineNumber: 2421,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
                                         children: item.name
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2162,
+                                        lineNumber: 2422,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("small", {
@@ -3153,31 +3380,31 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2163,
+                                        lineNumber: 2423,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                         children: item.isService ? "Service item" : `${item.stock} in stock`
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2166,
+                                        lineNumber: 2426,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, item.id, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2160,
+                                lineNumber: 2420,
                                 columnNumber: 13
                             }, this))
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2158,
+                        lineNumber: 2418,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2151,
+                lineNumber: 2411,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3192,25 +3419,25 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                     children: "Checkout"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2175,
+                                    lineNumber: 2435,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                     children: "Current sale"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2176,
+                                    lineNumber: 2436,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2174,
+                            lineNumber: 2434,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2173,
+                        lineNumber: 2433,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3222,7 +3449,7 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         children: "Customer"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2182,
+                                        lineNumber: 2442,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -3230,13 +3457,13 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         onChange: (event)=>onCustomerChange(event.target.value)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2183,
+                                        lineNumber: 2443,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2181,
+                                lineNumber: 2441,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -3245,7 +3472,7 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         children: "Phone"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2186,
+                                        lineNumber: 2446,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -3253,19 +3480,19 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         onChange: (event)=>onPhoneChange(event.target.value)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2187,
+                                        lineNumber: 2447,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2185,
+                                lineNumber: 2445,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2180,
+                        lineNumber: 2440,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3279,20 +3506,20 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                                 children: line.name
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2195,
+                                                lineNumber: 2455,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                                 children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(line.price)
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2196,
+                                                lineNumber: 2456,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2194,
+                                        lineNumber: 2454,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -3304,25 +3531,25 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         "aria-label": `Quantity for ${line.name}`
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2198,
+                                        lineNumber: 2458,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
                                         children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(line.price * line.quantity)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2206,
+                                        lineNumber: 2466,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, line.id, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2193,
+                                lineNumber: 2453,
                                 columnNumber: 13
                             }, this))
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2191,
+                        lineNumber: 2451,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3334,7 +3561,7 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         children: "Discount"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2213,
+                                        lineNumber: 2473,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -3344,13 +3571,13 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         onChange: (event)=>onDiscountChange(event.target.value)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2214,
+                                        lineNumber: 2474,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2212,
+                                lineNumber: 2472,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -3359,7 +3586,7 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         children: "Amount paid"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2222,
+                                        lineNumber: 2482,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -3369,13 +3596,13 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         onChange: (event)=>onAmountPaidChange(event.target.value)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2223,
+                                        lineNumber: 2483,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2221,
+                                lineNumber: 2481,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -3384,7 +3611,7 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         children: "Payment method"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2231,
+                                        lineNumber: 2491,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -3395,46 +3622,46 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                                 children: "Cash"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2233,
+                                                lineNumber: 2493,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
                                                 children: "Mobile Money"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2234,
+                                                lineNumber: 2494,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
                                                 children: "Bank Transfer"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2235,
+                                                lineNumber: 2495,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
                                                 children: "Card"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2236,
+                                                lineNumber: 2496,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2232,
+                                        lineNumber: 2492,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2230,
+                                lineNumber: 2490,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2211,
+                        lineNumber: 2471,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3447,13 +3674,13 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(subtotal)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2242,
+                                        lineNumber: 2502,
                                         columnNumber: 26
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2242,
+                                lineNumber: 2502,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3466,13 +3693,13 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2243,
+                                        lineNumber: 2503,
                                         columnNumber: 26
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2243,
+                                lineNumber: 2503,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3482,13 +3709,13 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(total)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2244,
+                                        lineNumber: 2504,
                                         columnNumber: 23
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2244,
+                                lineNumber: 2504,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3498,19 +3725,19 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(Math.max(total - amountPaid, 0))
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2245,
+                                        lineNumber: 2505,
                                         columnNumber: 25
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2245,
+                                lineNumber: 2505,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2241,
+                        lineNumber: 2501,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3526,14 +3753,14 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         size: 18
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2250,
+                                        lineNumber: 2510,
                                         columnNumber: 13
                                     }, this),
                                     "Clear cart"
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2249,
+                                lineNumber: 2509,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -3546,32 +3773,32 @@ function PosPanel({ cart, customer, phone, discount, discountInput, amountPaid, 
                                         size: 18
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2254,
+                                        lineNumber: 2514,
                                         columnNumber: 13
                                     }, this),
                                     "Save sale & print receipt"
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2253,
+                                lineNumber: 2513,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2248,
+                        lineNumber: 2508,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2172,
+                lineNumber: 2432,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 2150,
+        lineNumber: 2410,
         columnNumber: 5
     }, this);
 }
@@ -3595,7 +3822,7 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                     children: "Quote cart"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2301,
+                                    lineNumber: 2561,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
@@ -3603,13 +3830,13 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                     children: title
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2302,
+                                    lineNumber: 2562,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2300,
+                            lineNumber: 2560,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -3622,18 +3849,18 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                 size: 18
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2305,
+                                lineNumber: 2565,
                                 columnNumber: 13
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2304,
+                            lineNumber: 2564,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 2299,
+                    lineNumber: 2559,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
@@ -3651,25 +3878,25 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                                 children: "Products & services"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2313,
+                                                lineNumber: 2573,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                                 children: "Add items"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2314,
+                                                lineNumber: 2574,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2312,
+                                        lineNumber: 2572,
                                         columnNumber: 15
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2311,
+                                    lineNumber: 2571,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3683,14 +3910,14 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                                     children: item.category
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2320,
+                                                    lineNumber: 2580,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
                                                     children: item.name
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2321,
+                                                    lineNumber: 2581,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("small", {
@@ -3701,31 +3928,31 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2322,
+                                                    lineNumber: 2582,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                                     children: item.isService ? "Service item" : `${item.stock} in stock`
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2325,
+                                                    lineNumber: 2585,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, item.id, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2319,
+                                            lineNumber: 2579,
                                             columnNumber: 17
                                         }, this))
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2317,
+                                    lineNumber: 2577,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2310,
+                            lineNumber: 2570,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3740,25 +3967,25 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                                 children: "Checkout"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2334,
+                                                lineNumber: 2594,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                                 children: "Current quote"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2335,
+                                                lineNumber: 2595,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2333,
+                                        lineNumber: 2593,
                                         columnNumber: 15
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2332,
+                                    lineNumber: 2592,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3770,7 +3997,7 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                                     children: "Customer"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2341,
+                                                    lineNumber: 2601,
                                                     columnNumber: 17
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -3778,13 +4005,13 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                                     onChange: (event)=>onCustomerChange(event.target.value)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2342,
+                                                    lineNumber: 2602,
                                                     columnNumber: 17
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2340,
+                                            lineNumber: 2600,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -3793,7 +4020,7 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                                     children: "Phone"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2345,
+                                                    lineNumber: 2605,
                                                     columnNumber: 17
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -3801,19 +4028,19 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                                     onChange: (event)=>onPhoneChange(event.target.value)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2346,
+                                                    lineNumber: 2606,
                                                     columnNumber: 17
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2344,
+                                            lineNumber: 2604,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2339,
+                                    lineNumber: 2599,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3827,20 +4054,20 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                                             children: line.name
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                            lineNumber: 2354,
+                                                            lineNumber: 2614,
                                                             columnNumber: 21
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                                             children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(line.price)
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                            lineNumber: 2355,
+                                                            lineNumber: 2615,
                                                             columnNumber: 21
                                                         }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2353,
+                                                    lineNumber: 2613,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -3852,25 +4079,25 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                                     "aria-label": `Quantity for ${line.name}`
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2357,
+                                                    lineNumber: 2617,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
                                                     children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(line.price * line.quantity)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2365,
+                                                    lineNumber: 2625,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, line.id, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2352,
+                                            lineNumber: 2612,
                                             columnNumber: 17
                                         }, this))
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2350,
+                                    lineNumber: 2610,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3883,13 +4110,13 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                                     children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(total)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2371,
+                                                    lineNumber: 2631,
                                                     columnNumber: 30
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2371,
+                                            lineNumber: 2631,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3902,13 +4129,13 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2372,
+                                                    lineNumber: 2632,
                                                     columnNumber: 30
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2372,
+                                            lineNumber: 2632,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3918,19 +4145,19 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                                     children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(total)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2373,
+                                                    lineNumber: 2633,
                                                     columnNumber: 27
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2373,
+                                            lineNumber: 2633,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2370,
+                                    lineNumber: 2630,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3946,14 +4173,14 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                                     size: 18
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2378,
+                                                    lineNumber: 2638,
                                                     columnNumber: 17
                                                 }, this),
                                                 "Clear cart"
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2377,
+                                            lineNumber: 2637,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -3966,43 +4193,43 @@ function QuoteCartEditor({ title, customer, phone, cart, total, pending, invento
                                                     size: 18
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2382,
+                                                    lineNumber: 2642,
                                                     columnNumber: 17
                                                 }, this),
                                                 pending ? "Saving..." : "Save quote"
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2381,
+                                            lineNumber: 2641,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2376,
+                                    lineNumber: 2636,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2331,
+                            lineNumber: 2591,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 2309,
+                    lineNumber: 2569,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/src/app/admin/dashboard.tsx",
-            lineNumber: 2298,
+            lineNumber: 2558,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 2297,
+        lineNumber: 2557,
         columnNumber: 5
     }, this);
 }
@@ -4020,20 +4247,20 @@ function SalesPanel({ sales, onAdd, onEdit, onDelete, onReceipt }) {
                                 children: "Receipts & balances"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2410,
+                                lineNumber: 2670,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                 children: "Sales register"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2411,
+                                lineNumber: 2671,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2409,
+                        lineNumber: 2669,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -4045,20 +4272,20 @@ function SalesPanel({ sales, onAdd, onEdit, onDelete, onReceipt }) {
                                 size: 15
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2414,
+                                lineNumber: 2674,
                                 columnNumber: 11
                             }, this),
                             " Add sale"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2413,
+                        lineNumber: 2673,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2408,
+                lineNumber: 2668,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ResponsiveSalesTable, {
@@ -4068,13 +4295,13 @@ function SalesPanel({ sales, onAdd, onEdit, onDelete, onReceipt }) {
                 onReceipt: onReceipt
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2417,
+                lineNumber: 2677,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 2407,
+        lineNumber: 2667,
         columnNumber: 5
     }, this);
 }
@@ -4090,79 +4317,87 @@ function ResponsiveSalesTable({ sales, onEdit, onDelete, onReceipt }) {
                                 children: "Ref"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2438,
+                                lineNumber: 2698,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                 children: "Customer"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2439,
+                                lineNumber: 2699,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                 children: "Staff"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2440,
+                                lineNumber: 2700,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                 children: "Method"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2441,
+                                lineNumber: 2701,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                 children: "Status"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2442,
+                                lineNumber: 2702,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                 children: "Total"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2443,
+                                lineNumber: 2703,
+                                columnNumber: 13
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                children: "Profit"
+                            }, void 0, false, {
+                                fileName: "[project]/src/app/admin/dashboard.tsx",
+                                lineNumber: 2704,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                 children: "Paid"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2444,
+                                lineNumber: 2705,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                 children: "Balance"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2445,
+                                lineNumber: 2706,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                 children: "Action"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2446,
+                                lineNumber: 2707,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2437,
+                        lineNumber: 2697,
                         columnNumber: 11
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 2436,
+                    lineNumber: 2696,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
                     children: sales.map((sale)=>{
                         const total = saleTotal(sale);
+                        const profit = saleProfit(sale);
                         const balance = total - sale.paid;
                         return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
                             children: [
@@ -4171,7 +4406,7 @@ function ResponsiveSalesTable({ sales, onEdit, onDelete, onReceipt }) {
                                     children: sale.ref
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2455,
+                                    lineNumber: 2717,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -4179,7 +4414,7 @@ function ResponsiveSalesTable({ sales, onEdit, onDelete, onReceipt }) {
                                     children: sale.customer
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2456,
+                                    lineNumber: 2718,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -4187,7 +4422,7 @@ function ResponsiveSalesTable({ sales, onEdit, onDelete, onReceipt }) {
                                     children: sale.staff
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2457,
+                                    lineNumber: 2719,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -4195,7 +4430,7 @@ function ResponsiveSalesTable({ sales, onEdit, onDelete, onReceipt }) {
                                     children: sale.method
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2458,
+                                    lineNumber: 2720,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -4205,12 +4440,12 @@ function ResponsiveSalesTable({ sales, onEdit, onDelete, onReceipt }) {
                                         children: sale.status
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2460,
+                                        lineNumber: 2722,
                                         columnNumber: 17
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2459,
+                                    lineNumber: 2721,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -4218,7 +4453,15 @@ function ResponsiveSalesTable({ sales, onEdit, onDelete, onReceipt }) {
                                     children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(total)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2464,
+                                    lineNumber: 2726,
+                                    columnNumber: 15
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                    "data-label": "Profit",
+                                    children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(profit)
+                                }, void 0, false, {
+                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                    lineNumber: 2727,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -4226,7 +4469,7 @@ function ResponsiveSalesTable({ sales, onEdit, onDelete, onReceipt }) {
                                     children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(sale.paid)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2465,
+                                    lineNumber: 2728,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -4235,7 +4478,7 @@ function ResponsiveSalesTable({ sales, onEdit, onDelete, onReceipt }) {
                                     children: balance > 0 ? `${(0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(balance)}` : balance < 0 ? `Overpaid: ${(0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(Math.abs(balance))}` : "Paid"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2466,
+                                    lineNumber: 2729,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -4253,12 +4496,12 @@ function ResponsiveSalesTable({ sales, onEdit, onDelete, onReceipt }) {
                                                     size: 15
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2472,
+                                                    lineNumber: 2735,
                                                     columnNumber: 21
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2471,
+                                                lineNumber: 2734,
                                                 columnNumber: 19
                                             }, this),
                                             onEdit ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -4271,12 +4514,12 @@ function ResponsiveSalesTable({ sales, onEdit, onDelete, onReceipt }) {
                                                     size: 15
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2476,
+                                                    lineNumber: 2739,
                                                     columnNumber: 23
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2475,
+                                                lineNumber: 2738,
                                                 columnNumber: 21
                                             }, this) : null,
                                             onDelete ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -4289,46 +4532,46 @@ function ResponsiveSalesTable({ sales, onEdit, onDelete, onReceipt }) {
                                                     size: 15
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2481,
+                                                    lineNumber: 2744,
                                                     columnNumber: 23
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2480,
+                                                lineNumber: 2743,
                                                 columnNumber: 21
                                             }, this) : null
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2470,
+                                        lineNumber: 2733,
                                         columnNumber: 17
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2469,
+                                    lineNumber: 2732,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, sale.ref, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2454,
+                            lineNumber: 2716,
                             columnNumber: 13
                         }, this);
                     })
                 }, void 0, false, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 2449,
+                    lineNumber: 2710,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/src/app/admin/dashboard.tsx",
-            lineNumber: 2435,
+            lineNumber: 2695,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 2434,
+        lineNumber: 2694,
         columnNumber: 5
     }, this);
 }
@@ -4346,23 +4589,23 @@ function InventoryPanel({ items, status, onAdd, onEdit, onDelete }) {
                                 children: "Stock control"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2512,
+                                lineNumber: 2775,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                 children: "Inventory"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2513,
+                                lineNumber: 2776,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2511,
+                        lineNumber: 2774,
                         columnNumber: 9
                     }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                    onAdd ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                         type: "button",
                         className: "small-action",
                         onClick: onAdd,
@@ -4371,20 +4614,20 @@ function InventoryPanel({ items, status, onAdd, onEdit, onDelete }) {
                                 size: 15
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2516,
-                                columnNumber: 11
+                                lineNumber: 2780,
+                                columnNumber: 13
                             }, this),
                             " Add item"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2515,
-                        columnNumber: 9
-                    }, this)
+                        lineNumber: 2779,
+                        columnNumber: 11
+                    }, this) : null
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2510,
+                lineNumber: 2773,
                 columnNumber: 7
             }, this),
             status ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -4393,7 +4636,7 @@ function InventoryPanel({ items, status, onAdd, onEdit, onDelete }) {
                 children: status
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2520,
+                lineNumber: 2785,
                 columnNumber: 9
             }, this) : null,
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -4407,27 +4650,27 @@ function InventoryPanel({ items, status, onAdd, onEdit, onDelete }) {
                                         children: item.category
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2528,
+                                        lineNumber: 2793,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
                                         children: item.name
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2529,
+                                        lineNumber: 2794,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                         children: item.supplier
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2530,
+                                        lineNumber: 2795,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2527,
+                                lineNumber: 2792,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -4437,20 +4680,30 @@ function InventoryPanel({ items, status, onAdd, onEdit, onDelete }) {
                                         children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(item.price)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2533,
+                                        lineNumber: 2798,
+                                        columnNumber: 15
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                        children: [
+                                            "Cost ",
+                                            (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(item.costPrice)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/src/app/admin/dashboard.tsx",
+                                        lineNumber: 2799,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                         children: item.isService ? "Service" : `${item.stock} ${item.unit}s`
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2534,
+                                        lineNumber: 2800,
                                         columnNumber: 15
                                     }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    onEdit || onDelete ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                         className: "card-actions",
                                         children: [
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                            onEdit ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                                                 type: "button",
                                                 className: "icon-button",
                                                 onClick: ()=>onEdit(item),
@@ -4460,15 +4713,15 @@ function InventoryPanel({ items, status, onAdd, onEdit, onDelete }) {
                                                     size: 16
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2543,
-                                                    columnNumber: 19
+                                                    lineNumber: 2811,
+                                                    columnNumber: 23
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2536,
-                                                columnNumber: 17
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                                lineNumber: 2804,
+                                                columnNumber: 21
+                                            }, this) : null,
+                                            onDelete ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                                                 type: "button",
                                                 className: "icon-button danger",
                                                 onClick: ()=>onDelete(item),
@@ -4478,41 +4731,41 @@ function InventoryPanel({ items, status, onAdd, onEdit, onDelete }) {
                                                     size: 16
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2552,
-                                                    columnNumber: 19
+                                                    lineNumber: 2822,
+                                                    columnNumber: 23
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2545,
-                                                columnNumber: 17
-                                            }, this)
+                                                lineNumber: 2815,
+                                                columnNumber: 21
+                                            }, this) : null
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2535,
-                                        columnNumber: 15
-                                    }, this)
+                                        lineNumber: 2802,
+                                        columnNumber: 17
+                                    }, this) : null
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2532,
+                                lineNumber: 2797,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, item.id, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2526,
+                        lineNumber: 2791,
                         columnNumber: 11
                     }, this))
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2524,
+                lineNumber: 2789,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 2509,
+        lineNumber: 2772,
         columnNumber: 5
     }, this);
 }
@@ -4542,7 +4795,7 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     children: "Stock control"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2587,
+                                    lineNumber: 2859,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
@@ -4550,13 +4803,13 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     children: title
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2588,
+                                    lineNumber: 2860,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2586,
+                            lineNumber: 2858,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -4569,18 +4822,18 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                 size: 18
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2591,
+                                lineNumber: 2863,
                                 columnNumber: 13
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2590,
+                            lineNumber: 2862,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 2585,
+                    lineNumber: 2857,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -4592,7 +4845,7 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     children: "Name"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2597,
+                                    lineNumber: 2869,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -4600,13 +4853,13 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     onChange: (event)=>update("name", event.target.value)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2598,
+                                    lineNumber: 2870,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2596,
+                            lineNumber: 2868,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -4615,7 +4868,7 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     children: "Category"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2601,
+                                    lineNumber: 2873,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -4623,13 +4876,13 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     onChange: (event)=>update("category", event.target.value)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2602,
+                                    lineNumber: 2874,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2600,
+                            lineNumber: 2872,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -4638,7 +4891,7 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     children: "Supplier"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2605,
+                                    lineNumber: 2877,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -4646,13 +4899,13 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     onChange: (event)=>update("supplier", event.target.value)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2606,
+                                    lineNumber: 2878,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2604,
+                            lineNumber: 2876,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -4661,7 +4914,7 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     children: "Unit"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2609,
+                                    lineNumber: 2881,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -4669,22 +4922,22 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     onChange: (event)=>update("unit", event.target.value)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2610,
+                                    lineNumber: 2882,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2608,
+                            lineNumber: 2880,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
                             children: [
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                    children: "Price"
+                                    children: "Selling price"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2613,
+                                    lineNumber: 2885,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -4695,13 +4948,39 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     onChange: (event)=>update("price", event.target.value)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2614,
+                                    lineNumber: 2886,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2612,
+                            lineNumber: 2884,
+                            columnNumber: 11
+                        }, this),
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
+                            children: [
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                    children: "Cost price"
+                                }, void 0, false, {
+                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                    lineNumber: 2889,
+                                    columnNumber: 13
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
+                                    type: "number",
+                                    min: "0",
+                                    step: "0.01",
+                                    value: form.costPrice,
+                                    onChange: (event)=>update("costPrice", event.target.value)
+                                }, void 0, false, {
+                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                    lineNumber: 2890,
+                                    columnNumber: 13
+                                }, this)
+                            ]
+                        }, void 0, true, {
+                            fileName: "[project]/src/app/admin/dashboard.tsx",
+                            lineNumber: 2888,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -4710,7 +4989,7 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     children: "Stock"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2617,
+                                    lineNumber: 2893,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -4721,13 +5000,13 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     onChange: (event)=>update("stock", event.target.value)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2618,
+                                    lineNumber: 2894,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2616,
+                            lineNumber: 2892,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -4736,7 +5015,7 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     children: "Low stock threshold"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2621,
+                                    lineNumber: 2897,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -4747,13 +5026,13 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     onChange: (event)=>update("threshold", event.target.value)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2622,
+                                    lineNumber: 2898,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2620,
+                            lineNumber: 2896,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -4765,26 +5044,26 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     onChange: (event)=>update("isService", event.target.checked)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2625,
+                                    lineNumber: 2901,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                     children: "Service item"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2630,
+                                    lineNumber: 2906,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2624,
+                            lineNumber: 2900,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 2595,
+                    lineNumber: 2867,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -4798,7 +5077,7 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                             children: "Cancel"
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2635,
+                            lineNumber: 2911,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -4811,7 +5090,7 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                                     size: 18
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2639,
+                                    lineNumber: 2915,
                                     columnNumber: 13
                                 }, this),
                                 " ",
@@ -4819,24 +5098,24 @@ function InventoryEditor({ form, title, pending, onChange, onCancel, onSave }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 2638,
+                            lineNumber: 2914,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 2634,
+                    lineNumber: 2910,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/src/app/admin/dashboard.tsx",
-            lineNumber: 2584,
+            lineNumber: 2856,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 2583,
+        lineNumber: 2855,
         columnNumber: 5
     }, this);
 }
@@ -4850,11 +5129,11 @@ function SuppliersPanel({ rows, onAdd, onEdit, onDelete }) {
         eyebrow: "Vendor contacts",
         rows: listRows,
         onAdd: onAdd,
-        onEdit: (row)=>onEdit(row.raw),
-        onDelete: (row)=>onDelete(row.raw)
+        onEdit: onEdit ? (row)=>onEdit(row.raw) : undefined,
+        onDelete: onDelete ? (row)=>onDelete(row.raw) : undefined
     }, void 0, false, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 2659,
+        lineNumber: 2935,
         columnNumber: 10
     }, this);
 }
@@ -4872,11 +5151,11 @@ function PurchasesPanel({ rows, onAdd, onEdit, onDelete }) {
         eyebrow: "Restock records",
         rows: listRows,
         onAdd: onAdd,
-        onEdit: (row)=>onEdit(row.raw),
-        onDelete: (row)=>onDelete(row.raw)
+        onEdit: onEdit ? (row)=>onEdit(row.raw) : undefined,
+        onDelete: onDelete ? (row)=>onDelete(row.raw) : undefined
     }, void 0, false, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 2681,
+        lineNumber: 2957,
         columnNumber: 10
     }, this);
 }
@@ -4894,23 +5173,23 @@ function ExpensesPanel({ rows, onAdd, onEdit, onDelete }) {
                                 children: "Business costs"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2699,
+                                lineNumber: 2975,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                 children: "Expenses"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2700,
+                                lineNumber: 2976,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2698,
+                        lineNumber: 2974,
                         columnNumber: 9
                     }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                    onAdd ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                         type: "button",
                         className: "small-action",
                         onClick: onAdd,
@@ -4919,20 +5198,20 @@ function ExpensesPanel({ rows, onAdd, onEdit, onDelete }) {
                                 size: 15
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2703,
-                                columnNumber: 11
+                                lineNumber: 2980,
+                                columnNumber: 13
                             }, this),
                             " Add expense"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2702,
-                        columnNumber: 9
-                    }, this)
+                        lineNumber: 2979,
+                        columnNumber: 11
+                    }, this) : null
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2697,
+                lineNumber: 2973,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -4946,7 +5225,7 @@ function ExpensesPanel({ rows, onAdd, onEdit, onDelete }) {
                                         children: expense.category
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2710,
+                                        lineNumber: 2988,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -4959,46 +5238,46 @@ function ExpensesPanel({ rows, onAdd, onEdit, onDelete }) {
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2711,
+                                        lineNumber: 2989,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2709,
+                                lineNumber: 2987,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                 children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(expense.amount)
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2713,
+                                lineNumber: 2991,
                                 columnNumber: 13
                             }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(RowActions, {
-                                onEdit: ()=>onEdit(expense),
-                                onDelete: ()=>onDelete(expense),
+                            onEdit || onDelete ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(RowActions, {
+                                onEdit: onEdit ? ()=>onEdit(expense) : undefined,
+                                onDelete: onDelete ? ()=>onDelete(expense) : undefined,
                                 label: expense.category
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2714,
-                                columnNumber: 13
-                            }, this)
+                                lineNumber: 2992,
+                                columnNumber: 35
+                            }, this) : null
                         ]
                     }, expense.id, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2708,
+                        lineNumber: 2986,
                         columnNumber: 11
                     }, this))
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2706,
+                lineNumber: 2984,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 2696,
+        lineNumber: 2972,
         columnNumber: 5
     }, this);
 }
@@ -5016,20 +5295,20 @@ function QuotesPanel({ rows, onAdd, onEdit, onDelete, onPrint }) {
                                 children: "Customer requests"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2739,
+                                lineNumber: 3017,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                 children: "Quotes / Orders"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2740,
+                                lineNumber: 3018,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2738,
+                        lineNumber: 3016,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -5041,20 +5320,20 @@ function QuotesPanel({ rows, onAdd, onEdit, onDelete, onPrint }) {
                                 size: 15
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2743,
+                                lineNumber: 3021,
                                 columnNumber: 11
                             }, this),
                             " Add quote"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2742,
+                        lineNumber: 3020,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2737,
+                lineNumber: 3015,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -5065,10 +5344,14 @@ function QuotesPanel({ rows, onAdd, onEdit, onDelete, onPrint }) {
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                 children: [
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
-                                        children: quote.customer
-                                    }, void 0, false, {
+                                        children: [
+                                            quote.quoteNumber,
+                                            " · ",
+                                            quote.customer
+                                        ]
+                                    }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2750,
+                                        lineNumber: 3028,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -5081,13 +5364,13 @@ function QuotesPanel({ rows, onAdd, onEdit, onDelete, onPrint }) {
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2751,
+                                        lineNumber: 3029,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2749,
+                                lineNumber: 3027,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -5095,7 +5378,7 @@ function QuotesPanel({ rows, onAdd, onEdit, onDelete, onPrint }) {
                                 children: quote.status
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2757,
+                                lineNumber: 3035,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -5111,44 +5394,44 @@ function QuotesPanel({ rows, onAdd, onEdit, onDelete, onPrint }) {
                                             size: 15
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2760,
+                                            lineNumber: 3038,
                                             columnNumber: 17
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2759,
+                                        lineNumber: 3037,
                                         columnNumber: 15
                                     }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(RowActions, {
-                                        onEdit: ()=>onEdit(quote),
-                                        onDelete: ()=>onDelete(quote),
+                                    onEdit || onDelete ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(RowActions, {
+                                        onEdit: onEdit ? ()=>onEdit(quote) : undefined,
+                                        onDelete: onDelete ? ()=>onDelete(quote) : undefined,
                                         label: quote.customer
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2762,
-                                        columnNumber: 15
-                                    }, this)
+                                        lineNumber: 3040,
+                                        columnNumber: 37
+                                    }, this) : null
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2758,
+                                lineNumber: 3036,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, quote.id, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2748,
+                        lineNumber: 3026,
                         columnNumber: 11
                     }, this))
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2746,
+                lineNumber: 3024,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 2736,
+        lineNumber: 3014,
         columnNumber: 5
     }, this);
 }
@@ -5166,23 +5449,23 @@ function CustomersPanel({ rows, onAdd, onEdit, onDelete }) {
                                 children: "Buying history"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2786,
+                                lineNumber: 3064,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                 children: "Customers"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2787,
+                                lineNumber: 3065,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2785,
+                        lineNumber: 3063,
                         columnNumber: 9
                     }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                    onAdd ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                         type: "button",
                         className: "small-action",
                         onClick: onAdd,
@@ -5191,20 +5474,20 @@ function CustomersPanel({ rows, onAdd, onEdit, onDelete }) {
                                 size: 15
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2790,
-                                columnNumber: 11
+                                lineNumber: 3069,
+                                columnNumber: 13
                             }, this),
                             " Add customer"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2789,
-                        columnNumber: 9
-                    }, this)
+                        lineNumber: 3068,
+                        columnNumber: 11
+                    }, this) : null
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2784,
+                lineNumber: 3062,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -5218,14 +5501,14 @@ function CustomersPanel({ rows, onAdd, onEdit, onDelete }) {
                                         children: customer.phone
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2797,
+                                        lineNumber: 3077,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
                                         children: customer.name
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2798,
+                                        lineNumber: 3078,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -5235,13 +5518,13 @@ function CustomersPanel({ rows, onAdd, onEdit, onDelete }) {
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2799,
+                                        lineNumber: 3079,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2796,
+                                lineNumber: 3076,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -5251,53 +5534,53 @@ function CustomersPanel({ rows, onAdd, onEdit, onDelete }) {
                                         children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(customer.balance)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2802,
+                                        lineNumber: 3082,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                         children: "Balance"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2803,
+                                        lineNumber: 3083,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                         className: "card-actions",
-                                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(RowActions, {
-                                            onEdit: ()=>onEdit(customer),
-                                            onDelete: ()=>onDelete(customer),
+                                        children: onEdit || onDelete ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(RowActions, {
+                                            onEdit: onEdit ? ()=>onEdit(customer) : undefined,
+                                            onDelete: onDelete ? ()=>onDelete(customer) : undefined,
                                             label: customer.name
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2805,
-                                            columnNumber: 17
-                                        }, this)
+                                            lineNumber: 3085,
+                                            columnNumber: 39
+                                        }, this) : null
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2804,
+                                        lineNumber: 3084,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2801,
+                                lineNumber: 3081,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, customer.id, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2795,
+                        lineNumber: 3075,
                         columnNumber: 11
                     }, this))
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2793,
+                lineNumber: 3073,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 2783,
+        lineNumber: 3061,
         columnNumber: 5
     }, this);
 }
@@ -5339,25 +5622,30 @@ function reportPeriodLabel(period) {
 function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRecords, staffRecords }) {
     const [period, setPeriod] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])("this-month");
     const [reportKind, setReportKind] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(null);
-    const inventoryValue = inventoryItems.filter((item)=>!item.isService).reduce((sum, item)=>sum + item.price * item.stock, 0);
+    const inventoryCostValue = inventoryItems.filter((item)=>!item.isService).reduce((sum, item)=>sum + item.costPrice * item.stock, 0);
+    const inventorySellingValue = inventoryItems.filter((item)=>!item.isService).reduce((sum, item)=>sum + item.price * item.stock, 0);
     const filteredSales = salesRecords.filter((sale)=>isWithinReportPeriod(sale.date, period));
     const filteredExpenses = expenseRecords.filter((expense)=>isWithinReportPeriod(expense.date, period));
     const salesAmount = filteredSales.reduce((sum, sale)=>sum + saleTotal(sale), 0);
+    const salesCost = filteredSales.reduce((sum, sale)=>sum + saleCost(sale), 0);
+    const grossProfit = filteredSales.reduce((sum, sale)=>sum + saleProfit(sale), 0);
+    const grossMargin = profitMargin(grossProfit, salesAmount);
     const discountAmount = filteredSales.reduce((sum, sale)=>sum + sale.discount, 0);
-    const remainingInventoryValue = inventoryValue - salesAmount;
     const expensesTotal = filteredExpenses.reduce((sum, expense)=>sum + expense.amount, 0);
     const topCategory = (()=>{
         const byValue = {};
         for (const item of inventoryItems){
             if (!item.isService) {
-                byValue[item.category] = (byValue[item.category] ?? 0) + item.price * item.stock;
+                byValue[item.category] = (byValue[item.category] ?? 0) + item.costPrice * item.stock;
             }
         }
         const entries = Object.entries(byValue);
         if (!entries.length) return "—";
         return entries.sort(([, a], [, b])=>b - a)[0][0];
     })();
-    const openBalances = customerRecords.reduce((sum, c)=>sum + c.balance, 0);
+    const salesOpenBalances = filteredSales.reduce((sum, sale)=>sum + Math.max(saleTotal(sale) - sale.paid, 0), 0);
+    const customerOpenBalances = customerRecords.reduce((sum, customer)=>sum + Math.max(customer.balance, 0), 0);
+    const openBalances = salesOpenBalances > 0 ? salesOpenBalances : customerOpenBalances;
     const lowStockItems = inventoryItems.filter((item)=>!item.isService && item.stock <= item.threshold);
     const staffActivity = staffRecords.map((staff)=>{
         const sales = filteredSales.filter((sale)=>sale.staff === staff.name || sale.staff === staff.email);
@@ -5372,9 +5660,12 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
     const reportSummary = {
         kind: reportKind ?? "business",
         periodLabel: reportPeriodLabel(period),
-        inventoryValue,
+        inventoryCostValue,
+        inventorySellingValue,
         salesAmount,
-        remainingInventoryValue,
+        salesCost,
+        grossProfit,
+        grossMargin,
         discountAmount,
         expensesTotal,
         openBalances,
@@ -5404,20 +5695,20 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                                                 children: "Analysis period"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2937,
+                                                lineNumber: 3227,
                                                 columnNumber: 13
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                                 children: "Report filter"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2938,
+                                                lineNumber: 3228,
                                                 columnNumber: 13
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2936,
+                                        lineNumber: 3226,
                                         columnNumber: 11
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -5429,20 +5720,20 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                                                 size: 15
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2941,
+                                                lineNumber: 3231,
                                                 columnNumber: 13
                                             }, this),
                                             " Print report"
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2940,
+                                        lineNumber: 3230,
                                         columnNumber: 11
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2935,
+                                lineNumber: 3225,
                                 columnNumber: 9
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -5453,7 +5744,7 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                                             children: "Time period"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2946,
+                                            lineNumber: 3236,
                                             columnNumber: 13
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -5465,7 +5756,7 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                                                     children: "Today"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2948,
+                                                    lineNumber: 3238,
                                                     columnNumber: 15
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -5473,7 +5764,7 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                                                     children: "Yesterday"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2949,
+                                                    lineNumber: 3239,
                                                     columnNumber: 15
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -5481,7 +5772,7 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                                                     children: "This month"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2950,
+                                                    lineNumber: 3240,
                                                     columnNumber: 15
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -5489,7 +5780,7 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                                                     children: "Last 30 days"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2951,
+                                                    lineNumber: 3241,
                                                     columnNumber: 15
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -5497,40 +5788,40 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                                                     children: "All time"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 2952,
+                                                    lineNumber: 3242,
                                                     columnNumber: 15
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2947,
+                                            lineNumber: 3237,
                                             columnNumber: 13
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2945,
+                                    lineNumber: 3235,
                                     columnNumber: 11
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2944,
+                                lineNumber: 3234,
                                 columnNumber: 9
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2934,
+                        lineNumber: 3224,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
                         icon: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$badge$2d$dollar$2d$sign$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__BadgeDollarSign$3e$__["BadgeDollarSign"],
-                        label: "Inventory value",
-                        value: inventoryValue > 0 ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(inventoryValue) : "—",
+                        label: "Inventory cost value",
+                        value: inventoryCostValue > 0 ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(inventoryCostValue) : "—",
                         tone: "green"
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2957,
+                        lineNumber: 3247,
                         columnNumber: 7
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
@@ -5540,17 +5831,27 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                         tone: "gold"
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2958,
+                        lineNumber: 3248,
                         columnNumber: 7
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
                         icon: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$badge$2d$dollar$2d$sign$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__BadgeDollarSign$3e$__["BadgeDollarSign"],
-                        label: "Remaining inventory value",
-                        value: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(remainingInventoryValue),
+                        label: "Gross profit",
+                        value: salesAmount > 0 ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(grossProfit) : "—",
                         tone: "green"
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2959,
+                        lineNumber: 3249,
+                        columnNumber: 7
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
+                        icon: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$badge$2d$dollar$2d$sign$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$export__default__as__BadgeDollarSign$3e$__["BadgeDollarSign"],
+                        label: "Profit margin",
+                        value: salesAmount > 0 ? formatPercent(grossMargin) : "—",
+                        tone: "blue"
+                    }, void 0, false, {
+                        fileName: "[project]/src/app/admin/dashboard.tsx",
+                        lineNumber: 3250,
                         columnNumber: 7
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
@@ -5560,7 +5861,7 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                         tone: "blue"
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2960,
+                        lineNumber: 3251,
                         columnNumber: 7
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
@@ -5570,7 +5871,7 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                         tone: "red"
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2961,
+                        lineNumber: 3252,
                         columnNumber: 7
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
@@ -5580,7 +5881,7 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                         tone: "gold"
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2962,
+                        lineNumber: 3253,
                         columnNumber: 7
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MetricCard, {
@@ -5590,7 +5891,7 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                         tone: "blue"
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2963,
+                        lineNumber: 3254,
                         columnNumber: 7
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -5605,25 +5906,25 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                                             children: "Operational reports"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2967,
+                                            lineNumber: 3258,
                                             columnNumber: 13
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                             children: "Ready report exports"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 2968,
+                                            lineNumber: 3259,
                                             columnNumber: 13
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 2966,
+                                    lineNumber: 3257,
                                     columnNumber: 11
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2965,
+                                lineNumber: 3256,
                                 columnNumber: 9
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -5637,14 +5938,14 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                                                 size: 18
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2972,
+                                                lineNumber: 3263,
                                                 columnNumber: 72
                                             }, this),
                                             " Sales summary"
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2972,
+                                        lineNumber: 3263,
                                         columnNumber: 11
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -5655,14 +5956,14 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                                                 size: 18
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2973,
+                                                lineNumber: 3264,
                                                 columnNumber: 76
                                             }, this),
                                             " Low-stock report"
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2973,
+                                        lineNumber: 3264,
                                         columnNumber: 11
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -5673,14 +5974,14 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                                                 size: 18
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2974,
+                                                lineNumber: 3265,
                                                 columnNumber: 75
                                             }, this),
                                             " Expense report"
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2974,
+                                        lineNumber: 3265,
                                         columnNumber: 11
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -5691,32 +5992,32 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                                                 size: 18
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 2975,
+                                                lineNumber: 3266,
                                                 columnNumber: 72
                                             }, this),
                                             " Staff activity"
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 2975,
+                                        lineNumber: 3266,
                                         columnNumber: 11
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 2971,
+                                lineNumber: 3262,
                                 columnNumber: 9
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 2964,
+                        lineNumber: 3255,
                         columnNumber: 7
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2933,
+                lineNumber: 3223,
                 columnNumber: 7
             }, this),
             reportKind ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ReportPrintModal, {
@@ -5724,7 +6025,7 @@ function ReportsPanel({ inventoryItems, salesRecords, expenseRecords, customerRe
                 onClose: ()=>setReportKind(null)
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 2979,
+                lineNumber: 3270,
                 columnNumber: 21
             }, this) : null
         ]
@@ -5748,7 +6049,7 @@ function StaffPanel({ rows, onAdd, onEdit, onDelete }) {
         onDelete: (row)=>onDelete(row.raw)
     }, void 0, false, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 3003,
+        lineNumber: 3294,
         columnNumber: 10
     }, this);
 }
@@ -5766,20 +6067,20 @@ function SettingsPanel({ settings, onEdit }) {
                                 children: "Business profile"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3011,
+                                lineNumber: 3302,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                 children: "Settings"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3012,
+                                lineNumber: 3303,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 3010,
+                        lineNumber: 3301,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -5791,20 +6092,20 @@ function SettingsPanel({ settings, onEdit }) {
                                 size: 15
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3015,
+                                lineNumber: 3306,
                                 columnNumber: 11
                             }, this),
                             " Edit settings"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 3014,
+                        lineNumber: 3305,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 3009,
+                lineNumber: 3300,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -5817,7 +6118,7 @@ function SettingsPanel({ settings, onEdit }) {
                         height: 135
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 3019,
+                        lineNumber: 3310,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -5829,7 +6130,7 @@ function SettingsPanel({ settings, onEdit }) {
                                         children: "Business name"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 3022,
+                                        lineNumber: 3313,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -5837,13 +6138,13 @@ function SettingsPanel({ settings, onEdit }) {
                                         readOnly: true
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 3023,
+                                        lineNumber: 3314,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3021,
+                                lineNumber: 3312,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -5852,7 +6153,7 @@ function SettingsPanel({ settings, onEdit }) {
                                         children: "Phone numbers"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 3026,
+                                        lineNumber: 3317,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -5860,13 +6161,13 @@ function SettingsPanel({ settings, onEdit }) {
                                         readOnly: true
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 3027,
+                                        lineNumber: 3318,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3025,
+                                lineNumber: 3316,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -5875,7 +6176,7 @@ function SettingsPanel({ settings, onEdit }) {
                                         children: "Location"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 3030,
+                                        lineNumber: 3321,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -5883,13 +6184,13 @@ function SettingsPanel({ settings, onEdit }) {
                                         readOnly: true
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 3031,
+                                        lineNumber: 3322,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3029,
+                                lineNumber: 3320,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -5898,7 +6199,7 @@ function SettingsPanel({ settings, onEdit }) {
                                         children: "Receipt footer"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 3034,
+                                        lineNumber: 3325,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -5906,31 +6207,31 @@ function SettingsPanel({ settings, onEdit }) {
                                         readOnly: true
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 3035,
+                                        lineNumber: 3326,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3033,
+                                lineNumber: 3324,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 3020,
+                        lineNumber: 3311,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 3018,
+                lineNumber: 3309,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 3008,
+        lineNumber: 3299,
         columnNumber: 5
     }, this);
 }
@@ -5948,20 +6249,20 @@ function SimpleList({ title, eyebrow, rows, onAdd, onEdit, onDelete }) {
                                 children: eyebrow
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3062,
+                                lineNumber: 3353,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                 children: title
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3063,
+                                lineNumber: 3354,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 3061,
+                        lineNumber: 3352,
                         columnNumber: 9
                     }, this),
                     onAdd ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -5973,20 +6274,20 @@ function SimpleList({ title, eyebrow, rows, onAdd, onEdit, onDelete }) {
                                 size: 15
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3067,
+                                lineNumber: 3358,
                                 columnNumber: 13
                             }, this),
                             " Add"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 3066,
+                        lineNumber: 3357,
                         columnNumber: 11
                     }, this) : null
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 3060,
+                lineNumber: 3351,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6000,7 +6301,7 @@ function SimpleList({ title, eyebrow, rows, onAdd, onEdit, onDelete }) {
                                         children: row.name
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 3075,
+                                        lineNumber: 3366,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -6011,13 +6312,13 @@ function SimpleList({ title, eyebrow, rows, onAdd, onEdit, onDelete }) {
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 3076,
+                                        lineNumber: 3367,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3074,
+                                lineNumber: 3365,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -6025,7 +6326,7 @@ function SimpleList({ title, eyebrow, rows, onAdd, onEdit, onDelete }) {
                                 children: row.active ? "Active" : "Inactive"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3078,
+                                lineNumber: 3369,
                                 columnNumber: 13
                             }, this),
                             onEdit && onDelete ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(RowActions, {
@@ -6034,24 +6335,24 @@ function SimpleList({ title, eyebrow, rows, onAdd, onEdit, onDelete }) {
                                 label: row.name
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3082,
+                                lineNumber: 3373,
                                 columnNumber: 15
                             }, this) : null
                         ]
                     }, row.id ?? `${row.name}-${row.phone}`, true, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 3073,
+                        lineNumber: 3364,
                         columnNumber: 11
                     }, this))
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 3071,
+                lineNumber: 3362,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 3059,
+        lineNumber: 3350,
         columnNumber: 5
     }, this);
 }
@@ -6059,7 +6360,7 @@ function RowActions({ onEdit, onDelete, label }) {
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
         className: "row-actions",
         children: [
-            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+            onEdit ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                 type: "button",
                 className: "icon-button",
                 onClick: onEdit,
@@ -6069,15 +6370,15 @@ function RowActions({ onEdit, onDelete, label }) {
                     size: 15
                 }, void 0, false, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 3103,
-                    columnNumber: 9
+                    lineNumber: 3395,
+                    columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 3102,
-                columnNumber: 7
-            }, this),
-            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                lineNumber: 3394,
+                columnNumber: 9
+            }, this) : null,
+            onDelete ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                 type: "button",
                 className: "icon-button danger",
                 onClick: onDelete,
@@ -6087,18 +6388,18 @@ function RowActions({ onEdit, onDelete, label }) {
                     size: 15
                 }, void 0, false, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 3106,
-                    columnNumber: 9
+                    lineNumber: 3400,
+                    columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 3105,
-                columnNumber: 7
-            }, this)
+                lineNumber: 3399,
+                columnNumber: 9
+            }, this) : null
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 3101,
+        lineNumber: 3392,
         columnNumber: 5
     }, this);
 }
@@ -6122,7 +6423,7 @@ function ManagedEditor({ editor, pending, onChange, onCancel, onSave }) {
                                     children: "Admin management"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3130,
+                                    lineNumber: 3425,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
@@ -6130,13 +6431,13 @@ function ManagedEditor({ editor, pending, onChange, onCancel, onSave }) {
                                     children: editor.title
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3131,
+                                    lineNumber: 3426,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3129,
+                            lineNumber: 3424,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -6149,18 +6450,18 @@ function ManagedEditor({ editor, pending, onChange, onCancel, onSave }) {
                                 size: 18
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3134,
+                                lineNumber: 3429,
                                 columnNumber: 13
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3133,
+                            lineNumber: 3428,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 3128,
+                    lineNumber: 3423,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6171,7 +6472,7 @@ function ManagedEditor({ editor, pending, onChange, onCancel, onSave }) {
                                     children: field.label
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3141,
+                                    lineNumber: 3436,
                                     columnNumber: 15
                                 }, this),
                                 field.type === "select" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -6182,12 +6483,12 @@ function ManagedEditor({ editor, pending, onChange, onCancel, onSave }) {
                                             children: option
                                         }, option, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3145,
+                                            lineNumber: 3440,
                                             columnNumber: 21
                                         }, this))
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3143,
+                                    lineNumber: 3438,
                                     columnNumber: 17
                                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
                                     type: field.type ?? "text",
@@ -6198,18 +6499,18 @@ function ManagedEditor({ editor, pending, onChange, onCancel, onSave }) {
                                     onChange: (event)=>onChange(field.name, event.target.value)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3151,
+                                    lineNumber: 3446,
                                     columnNumber: 17
                                 }, this)
                             ]
                         }, field.name, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3140,
+                            lineNumber: 3435,
                             columnNumber: 13
                         }, this))
                 }, void 0, false, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 3138,
+                    lineNumber: 3433,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6223,7 +6524,7 @@ function ManagedEditor({ editor, pending, onChange, onCancel, onSave }) {
                             children: "Cancel"
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3165,
+                            lineNumber: 3460,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -6236,7 +6537,7 @@ function ManagedEditor({ editor, pending, onChange, onCancel, onSave }) {
                                     size: 18
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3169,
+                                    lineNumber: 3464,
                                     columnNumber: 13
                                 }, this),
                                 " ",
@@ -6244,24 +6545,24 @@ function ManagedEditor({ editor, pending, onChange, onCancel, onSave }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3168,
+                            lineNumber: 3463,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 3164,
+                    lineNumber: 3459,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/src/app/admin/dashboard.tsx",
-            lineNumber: 3127,
+            lineNumber: 3422,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 3126,
+        lineNumber: 3421,
         columnNumber: 5
     }, this);
 }
@@ -6304,14 +6605,14 @@ function QuotePrintModal({ quote, onClose }) {
                                     size: 15
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3201,
+                                    lineNumber: 3496,
                                     columnNumber: 13
                                 }, this),
                                 " Print"
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3200,
+                            lineNumber: 3495,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -6324,18 +6625,18 @@ function QuotePrintModal({ quote, onClose }) {
                                 size: 18
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3204,
+                                lineNumber: 3499,
                                 columnNumber: 13
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3203,
+                            lineNumber: 3498,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 3199,
+                    lineNumber: 3494,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6354,7 +6655,7 @@ function QuotePrintModal({ quote, onClose }) {
                                             height: 69
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3211,
+                                            lineNumber: 3506,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6363,28 +6664,28 @@ function QuotePrintModal({ quote, onClose }) {
                                                     children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["brand"].name
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3213,
+                                                    lineNumber: 3508,
                                                     columnNumber: 17
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                                     children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["brand"].tagline
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3214,
+                                                    lineNumber: 3509,
                                                     columnNumber: 17
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                                     children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["brand"].address
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3215,
+                                                    lineNumber: 3510,
                                                     columnNumber: 17
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                                     children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["brand"].location
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3216,
+                                                    lineNumber: 3511,
                                                     columnNumber: 17
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -6394,19 +6695,19 @@ function QuotePrintModal({ quote, onClose }) {
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3217,
+                                                    lineNumber: 3512,
                                                     columnNumber: 17
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3212,
+                                            lineNumber: 3507,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3210,
+                                    lineNumber: 3505,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6416,17 +6717,17 @@ function QuotePrintModal({ quote, onClose }) {
                                             children: "Quotation"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3221,
+                                            lineNumber: 3516,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                             children: [
                                                 "No: ",
-                                                quote.id.toUpperCase()
+                                                quote.quoteNumber
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3222,
+                                            lineNumber: 3517,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -6436,7 +6737,7 @@ function QuotePrintModal({ quote, onClose }) {
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3223,
+                                            lineNumber: 3518,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -6446,19 +6747,19 @@ function QuotePrintModal({ quote, onClose }) {
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3224,
+                                            lineNumber: 3519,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3220,
+                                    lineNumber: 3515,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3209,
+                            lineNumber: 3504,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
@@ -6470,27 +6771,27 @@ function QuotePrintModal({ quote, onClose }) {
                                             children: "Prepared for"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3230,
+                                            lineNumber: 3525,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
                                             children: quote.customer || "Customer"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3231,
+                                            lineNumber: 3526,
                                             columnNumber: 15
                                         }, this),
                                         quote.phone ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                             children: quote.phone
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3232,
+                                            lineNumber: 3527,
                                             columnNumber: 30
                                         }, this) : null
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3229,
+                                    lineNumber: 3524,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6499,26 +6800,26 @@ function QuotePrintModal({ quote, onClose }) {
                                             children: "Status"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3235,
+                                            lineNumber: 3530,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
                                             children: quote.status
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3236,
+                                            lineNumber: 3531,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3234,
+                                    lineNumber: 3529,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3228,
+                            lineNumber: 3523,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("table", {
@@ -6531,140 +6832,101 @@ function QuotePrintModal({ quote, onClose }) {
                                                 children: "No."
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 3243,
+                                                lineNumber: 3538,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                                 children: "Description"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 3244,
+                                                lineNumber: 3539,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                                 children: "Qty"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 3245,
+                                                lineNumber: 3540,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                                 children: "Unit price"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 3246,
+                                                lineNumber: 3541,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                                 children: "Amount"
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 3247,
+                                                lineNumber: 3542,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 3242,
+                                        lineNumber: 3537,
                                         columnNumber: 15
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3241,
+                                    lineNumber: 3536,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
-                                    children: [
-                                        quoteRows.map((item, index)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
-                                                children: [
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                        children: index + 1
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                        lineNumber: 3253,
-                                                        columnNumber: 19
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                        children: item.name
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                        lineNumber: 3254,
-                                                        columnNumber: 19
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                        children: item.quantity
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                        lineNumber: 3255,
-                                                        columnNumber: 19
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                        children: item.price > 0 ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(item.price) : ""
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                        lineNumber: 3256,
-                                                        columnNumber: 19
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                        children: item.price > 0 ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(item.price * item.quantity) : ""
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                        lineNumber: 3257,
-                                                        columnNumber: 19
-                                                    }, this)
-                                                ]
-                                            }, `${quote.id}-${item.name}-${index}`, true, {
-                                                fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 3252,
-                                                columnNumber: 17
-                                            }, this)),
-                                        Array.from({
-                                            length: Math.max(0, 6 - requestedItems.length)
-                                        }, (_, index)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
-                                                children: [
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                        children: requestedItems.length + index + 1
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                        lineNumber: 3262,
-                                                        columnNumber: 19
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {}, void 0, false, {
-                                                        fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                        lineNumber: 3263,
-                                                        columnNumber: 19
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {}, void 0, false, {
-                                                        fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                        lineNumber: 3264,
-                                                        columnNumber: 19
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {}, void 0, false, {
-                                                        fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                        lineNumber: 3265,
-                                                        columnNumber: 19
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {}, void 0, false, {
-                                                        fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                        lineNumber: 3266,
-                                                        columnNumber: 19
-                                                    }, this)
-                                                ]
-                                            }, `${quote.id}-blank-${index}`, true, {
-                                                fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                lineNumber: 3261,
-                                                columnNumber: 17
-                                            }, this))
-                                    ]
-                                }, void 0, true, {
+                                    children: quoteRows.map((item, index)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
+                                            children: [
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                    children: index + 1
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                                    lineNumber: 3548,
+                                                    columnNumber: 19
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                    children: item.name
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                                    lineNumber: 3549,
+                                                    columnNumber: 19
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                    children: item.quantity
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                                    lineNumber: 3550,
+                                                    columnNumber: 19
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                    children: item.price > 0 ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(item.price) : ""
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                                    lineNumber: 3551,
+                                                    columnNumber: 19
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                    children: item.price > 0 ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(item.price * item.quantity) : ""
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                                    lineNumber: 3552,
+                                                    columnNumber: 19
+                                                }, this)
+                                            ]
+                                        }, `${quote.id}-${item.name}-${index}`, true, {
+                                            fileName: "[project]/src/app/admin/dashboard.tsx",
+                                            lineNumber: 3547,
+                                            columnNumber: 17
+                                        }, this))
+                                }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3250,
+                                    lineNumber: 3545,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3240,
+                            lineNumber: 3535,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
@@ -6676,20 +6938,20 @@ function QuotePrintModal({ quote, onClose }) {
                                             children: "Notes"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3274,
+                                            lineNumber: 3560,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                             children: "Prices, availability, delivery, and payment terms should be confirmed before supply."
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3275,
+                                            lineNumber: 3561,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3273,
+                                    lineNumber: 3559,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6701,20 +6963,20 @@ function QuotePrintModal({ quote, onClose }) {
                                                     children: "Subtotal"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3278,
+                                                    lineNumber: 3564,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                                     children: quote.totalAmount > 0 ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(quote.totalAmount) : ""
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3278,
+                                                    lineNumber: 3564,
                                                     columnNumber: 46
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3278,
+                                            lineNumber: 3564,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -6723,18 +6985,18 @@ function QuotePrintModal({ quote, onClose }) {
                                                     children: "Discount"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3279,
+                                                    lineNumber: 3565,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {}, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3279,
+                                                    lineNumber: 3565,
                                                     columnNumber: 46
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3279,
+                                            lineNumber: 3565,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -6743,32 +7005,32 @@ function QuotePrintModal({ quote, onClose }) {
                                                     children: "Total"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3280,
+                                                    lineNumber: 3566,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                                     children: quote.totalAmount > 0 ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(quote.totalAmount) : ""
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3280,
+                                                    lineNumber: 3566,
                                                     columnNumber: 43
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3280,
+                                            lineNumber: 3566,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3277,
+                                    lineNumber: 3563,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3272,
+                            lineNumber: 3558,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("footer", {
@@ -6780,20 +7042,20 @@ function QuotePrintModal({ quote, onClose }) {
                                             children: "Prepared by"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3286,
+                                            lineNumber: 3572,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
                                             children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["brand"].name
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3287,
+                                            lineNumber: 3573,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3285,
+                                    lineNumber: 3571,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6802,41 +7064,41 @@ function QuotePrintModal({ quote, onClose }) {
                                             children: "Customer signature"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3290,
+                                            lineNumber: 3576,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {}, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3291,
+                                            lineNumber: 3577,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3289,
+                                    lineNumber: 3575,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3284,
+                            lineNumber: 3570,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 3208,
+                    lineNumber: 3503,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/src/app/admin/dashboard.tsx",
-            lineNumber: 3198,
+            lineNumber: 3493,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 3197,
+        lineNumber: 3492,
         columnNumber: 5
     }, this);
 }
@@ -6872,14 +7134,14 @@ function ReportPrintModal({ summary, onClose }) {
                                     size: 15
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3347,
+                                    lineNumber: 3636,
                                     columnNumber: 13
                                 }, this),
                                 " Print"
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3346,
+                            lineNumber: 3635,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -6892,18 +7154,18 @@ function ReportPrintModal({ summary, onClose }) {
                                 size: 18
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3350,
+                                lineNumber: 3639,
                                 columnNumber: 13
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3349,
+                            lineNumber: 3638,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 3345,
+                    lineNumber: 3634,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6917,40 +7179,40 @@ function ReportPrintModal({ summary, onClose }) {
                             className: "receipt-logo"
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3355,
+                            lineNumber: 3644,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                             children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["brand"].name
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3356,
+                            lineNumber: 3645,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                             children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["brand"].tagline
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3357,
+                            lineNumber: 3646,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                             children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["brand"].location
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3358,
+                            lineNumber: 3647,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("hr", {}, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3359,
+                            lineNumber: 3648,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
                             children: title
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3360,
+                            lineNumber: 3649,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -6960,7 +7222,7 @@ function ReportPrintModal({ summary, onClose }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3361,
+                            lineNumber: 3650,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -6970,12 +7232,12 @@ function ReportPrintModal({ summary, onClose }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3362,
+                            lineNumber: 3651,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("hr", {}, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3363,
+                            lineNumber: 3652,
                             columnNumber: 11
                         }, this),
                         summary.kind === "business" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -6987,64 +7249,130 @@ function ReportPrintModal({ summary, onClose }) {
                                             children: "Total sales amount"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3366,
+                                            lineNumber: 3655,
                                             columnNumber: 21
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                             children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.salesAmount)
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3366,
+                                            lineNumber: 3655,
                                             columnNumber: 56
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3366,
+                                    lineNumber: 3655,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                     children: [
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
-                                            children: "Remaining inventory value"
+                                            children: "Cost of goods sold"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3367,
+                                            lineNumber: 3656,
                                             columnNumber: 21
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
-                                            children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.remainingInventoryValue)
+                                            children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.salesCost)
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3367,
-                                            columnNumber: 63
+                                            lineNumber: 3656,
+                                            columnNumber: 56
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3367,
+                                    lineNumber: 3656,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                     children: [
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
-                                            children: "Total inventory value"
+                                            children: "Gross profit"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3368,
+                                            lineNumber: 3657,
                                             columnNumber: 21
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
-                                            children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.inventoryValue)
+                                            children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.grossProfit)
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3368,
-                                            columnNumber: 59
+                                            lineNumber: 3657,
+                                            columnNumber: 50
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3368,
+                                    lineNumber: 3657,
+                                    columnNumber: 15
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                    children: [
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
+                                            children: "Profit margin"
+                                        }, void 0, false, {
+                                            fileName: "[project]/src/app/admin/dashboard.tsx",
+                                            lineNumber: 3658,
+                                            columnNumber: 21
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
+                                            children: formatPercent(summary.grossMargin)
+                                        }, void 0, false, {
+                                            fileName: "[project]/src/app/admin/dashboard.tsx",
+                                            lineNumber: 3658,
+                                            columnNumber: 51
+                                        }, this)
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                    lineNumber: 3658,
+                                    columnNumber: 15
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                    children: [
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
+                                            children: "Inventory cost value"
+                                        }, void 0, false, {
+                                            fileName: "[project]/src/app/admin/dashboard.tsx",
+                                            lineNumber: 3659,
+                                            columnNumber: 21
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
+                                            children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.inventoryCostValue)
+                                        }, void 0, false, {
+                                            fileName: "[project]/src/app/admin/dashboard.tsx",
+                                            lineNumber: 3659,
+                                            columnNumber: 58
+                                        }, this)
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                    lineNumber: 3659,
+                                    columnNumber: 15
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                    children: [
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
+                                            children: "Inventory selling value"
+                                        }, void 0, false, {
+                                            fileName: "[project]/src/app/admin/dashboard.tsx",
+                                            lineNumber: 3660,
+                                            columnNumber: 21
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
+                                            children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.inventorySellingValue)
+                                        }, void 0, false, {
+                                            fileName: "[project]/src/app/admin/dashboard.tsx",
+                                            lineNumber: 3660,
+                                            columnNumber: 61
+                                        }, this)
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                    lineNumber: 3660,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7053,20 +7381,20 @@ function ReportPrintModal({ summary, onClose }) {
                                             children: "Discounts given"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3369,
+                                            lineNumber: 3661,
                                             columnNumber: 21
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                             children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.discountAmount)
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3369,
+                                            lineNumber: 3661,
                                             columnNumber: 53
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3369,
+                                    lineNumber: 3661,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7075,20 +7403,20 @@ function ReportPrintModal({ summary, onClose }) {
                                             children: "Expenses"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3370,
+                                            lineNumber: 3662,
                                             columnNumber: 21
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                             children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.expensesTotal)
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3370,
+                                            lineNumber: 3662,
                                             columnNumber: 46
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3370,
+                                    lineNumber: 3662,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7097,20 +7425,20 @@ function ReportPrintModal({ summary, onClose }) {
                                             children: "Open customer balances"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3371,
+                                            lineNumber: 3663,
                                             columnNumber: 21
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                             children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.openBalances)
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3371,
+                                            lineNumber: 3663,
                                             columnNumber: 60
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3371,
+                                    lineNumber: 3663,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7119,20 +7447,20 @@ function ReportPrintModal({ summary, onClose }) {
                                             children: "Sales count"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3372,
+                                            lineNumber: 3664,
                                             columnNumber: 21
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                             children: summary.salesCount
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3372,
+                                            lineNumber: 3664,
                                             columnNumber: 49
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3372,
+                                    lineNumber: 3664,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7141,20 +7469,20 @@ function ReportPrintModal({ summary, onClose }) {
                                             children: "Low stock items"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3373,
+                                            lineNumber: 3665,
                                             columnNumber: 21
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                             children: summary.lowStockCount
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3373,
+                                            lineNumber: 3665,
                                             columnNumber: 53
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3373,
+                                    lineNumber: 3665,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7163,26 +7491,26 @@ function ReportPrintModal({ summary, onClose }) {
                                             children: "Top inventory category"
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3374,
+                                            lineNumber: 3666,
                                             columnNumber: 21
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                             children: summary.topCategory
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3374,
+                                            lineNumber: 3666,
                                             columnNumber: 60
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3374,
+                                    lineNumber: 3666,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3365,
+                            lineNumber: 3654,
                             columnNumber: 13
                         }, this) : null,
                         summary.kind === "sales" ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
@@ -7196,20 +7524,86 @@ function ReportPrintModal({ summary, onClose }) {
                                                     children: "Total sales amount"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3381,
+                                                    lineNumber: 3673,
                                                     columnNumber: 23
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                                     children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.salesAmount)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3381,
+                                                    lineNumber: 3673,
                                                     columnNumber: 58
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3381,
+                                            lineNumber: 3673,
+                                            columnNumber: 17
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                            children: [
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
+                                                    children: "Cost of goods sold"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                                    lineNumber: 3674,
+                                                    columnNumber: 23
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
+                                                    children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.salesCost)
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                                    lineNumber: 3674,
+                                                    columnNumber: 58
+                                                }, this)
+                                            ]
+                                        }, void 0, true, {
+                                            fileName: "[project]/src/app/admin/dashboard.tsx",
+                                            lineNumber: 3674,
+                                            columnNumber: 17
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                            children: [
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
+                                                    children: "Gross profit"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                                    lineNumber: 3675,
+                                                    columnNumber: 23
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
+                                                    children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.grossProfit)
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                                    lineNumber: 3675,
+                                                    columnNumber: 52
+                                                }, this)
+                                            ]
+                                        }, void 0, true, {
+                                            fileName: "[project]/src/app/admin/dashboard.tsx",
+                                            lineNumber: 3675,
+                                            columnNumber: 17
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                            children: [
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
+                                                    children: "Profit margin"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                                    lineNumber: 3676,
+                                                    columnNumber: 23
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
+                                                    children: formatPercent(summary.grossMargin)
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                                    lineNumber: 3676,
+                                                    columnNumber: 53
+                                                }, this)
+                                            ]
+                                        }, void 0, true, {
+                                            fileName: "[project]/src/app/admin/dashboard.tsx",
+                                            lineNumber: 3676,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7218,20 +7612,20 @@ function ReportPrintModal({ summary, onClose }) {
                                                     children: "Sales count"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3382,
+                                                    lineNumber: 3677,
                                                     columnNumber: 23
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                                     children: summary.salesCount
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3382,
+                                                    lineNumber: 3677,
                                                     columnNumber: 51
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3382,
+                                            lineNumber: 3677,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7240,26 +7634,48 @@ function ReportPrintModal({ summary, onClose }) {
                                                     children: "Discounts given"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3383,
+                                                    lineNumber: 3678,
                                                     columnNumber: 23
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                                     children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.discountAmount)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3383,
+                                                    lineNumber: 3678,
                                                     columnNumber: 55
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3383,
+                                            lineNumber: 3678,
+                                            columnNumber: 17
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                            children: [
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("strong", {
+                                                    children: "Open balances"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                                    lineNumber: 3679,
+                                                    columnNumber: 23
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
+                                                    children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.openBalances)
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/app/admin/dashboard.tsx",
+                                                    lineNumber: 3679,
+                                                    columnNumber: 53
+                                                }, this)
+                                            ]
+                                        }, void 0, true, {
+                                            fileName: "[project]/src/app/admin/dashboard.tsx",
+                                            lineNumber: 3679,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3380,
+                                    lineNumber: 3672,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ReportTable, {
@@ -7268,18 +7684,24 @@ function ReportPrintModal({ summary, onClose }) {
                                         "Customer",
                                         "Staff",
                                         "Total",
-                                        "Paid"
+                                        "Cost",
+                                        "Profit",
+                                        "Paid",
+                                        "Balance"
                                     ],
                                     rows: summary.sales.map((sale)=>[
                                             sale.ref,
                                             sale.customer,
                                             sale.staff,
                                             (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(saleTotal(sale)),
-                                            (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(sale.paid)
+                                            (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(saleCost(sale)),
+                                            (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(saleProfit(sale)),
+                                            (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(sale.paid),
+                                            (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(Math.max(saleTotal(sale) - sale.paid, 0))
                                         ])
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3385,
+                                    lineNumber: 3681,
                                     columnNumber: 15
                                 }, this)
                             ]
@@ -7295,20 +7717,20 @@ function ReportPrintModal({ summary, onClose }) {
                                                     children: "Low stock items"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3401,
+                                                    lineNumber: 3700,
                                                     columnNumber: 23
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                                     children: summary.lowStockCount
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3401,
+                                                    lineNumber: 3700,
                                                     columnNumber: 55
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3401,
+                                            lineNumber: 3700,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7317,26 +7739,26 @@ function ReportPrintModal({ summary, onClose }) {
                                                     children: "Top inventory category"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3402,
+                                                    lineNumber: 3701,
                                                     columnNumber: 23
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                                     children: summary.topCategory
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3402,
+                                                    lineNumber: 3701,
                                                     columnNumber: 62
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3402,
+                                            lineNumber: 3701,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3400,
+                                    lineNumber: 3699,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ReportTable, {
@@ -7354,7 +7776,7 @@ function ReportPrintModal({ summary, onClose }) {
                                         ])
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3404,
+                                    lineNumber: 3703,
                                     columnNumber: 15
                                 }, this)
                             ]
@@ -7370,20 +7792,20 @@ function ReportPrintModal({ summary, onClose }) {
                                                     children: "Total expenses"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3419,
+                                                    lineNumber: 3718,
                                                     columnNumber: 23
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                                     children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(summary.expensesTotal)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3419,
+                                                    lineNumber: 3718,
                                                     columnNumber: 54
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3419,
+                                            lineNumber: 3718,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7392,26 +7814,26 @@ function ReportPrintModal({ summary, onClose }) {
                                                     children: "Expense entries"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3420,
+                                                    lineNumber: 3719,
                                                     columnNumber: 23
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                                     children: summary.expenses.length
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3420,
+                                                    lineNumber: 3719,
                                                     columnNumber: 55
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3420,
+                                            lineNumber: 3719,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3418,
+                                    lineNumber: 3717,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ReportTable, {
@@ -7429,7 +7851,7 @@ function ReportPrintModal({ summary, onClose }) {
                                         ])
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3422,
+                                    lineNumber: 3721,
                                     columnNumber: 15
                                 }, this)
                             ]
@@ -7445,20 +7867,20 @@ function ReportPrintModal({ summary, onClose }) {
                                                     children: "Active staff"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3437,
+                                                    lineNumber: 3736,
                                                     columnNumber: 23
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                                     children: summary.staffActivity.filter((staff)=>staff.active).length
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3437,
+                                                    lineNumber: 3736,
                                                     columnNumber: 52
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3437,
+                                            lineNumber: 3736,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7467,26 +7889,26 @@ function ReportPrintModal({ summary, onClose }) {
                                                     children: "Sales count"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3438,
+                                                    lineNumber: 3737,
                                                     columnNumber: 23
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("em", {
                                                     children: summary.salesCount
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                                    lineNumber: 3438,
+                                                    lineNumber: 3737,
                                                     columnNumber: 51
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3438,
+                                            lineNumber: 3737,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3436,
+                                    lineNumber: 3735,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ReportTable, {
@@ -7504,38 +7926,38 @@ function ReportPrintModal({ summary, onClose }) {
                                         ])
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3440,
+                                    lineNumber: 3739,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true) : null,
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("hr", {}, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3451,
+                            lineNumber: 3750,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                             children: "Prepared for management review."
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3452,
+                            lineNumber: 3751,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 3354,
+                    lineNumber: 3643,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/src/app/admin/dashboard.tsx",
-            lineNumber: 3344,
+            lineNumber: 3633,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 3343,
+        lineNumber: 3632,
         columnNumber: 5
     }, this);
 }
@@ -7545,7 +7967,7 @@ function ReportTable({ headers, rows }) {
             children: "No records found for this period."
         }, void 0, false, {
             fileName: "[project]/src/app/admin/dashboard.tsx",
-            lineNumber: 3461,
+            lineNumber: 3760,
             columnNumber: 12
         }, this);
     }
@@ -7558,17 +7980,17 @@ function ReportTable({ headers, rows }) {
                             children: header
                         }, header, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3469,
+                            lineNumber: 3768,
                             columnNumber: 13
                         }, this))
                 }, void 0, false, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 3467,
+                    lineNumber: 3766,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 3466,
+                lineNumber: 3765,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
@@ -7577,23 +7999,23 @@ function ReportTable({ headers, rows }) {
                                 children: cell
                             }, `${cell}-${cellIndex}`, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3477,
+                                lineNumber: 3776,
                                 columnNumber: 15
                             }, this))
                     }, `${row.join("-")}-${index}`, false, {
                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                        lineNumber: 3475,
+                        lineNumber: 3774,
                         columnNumber: 11
                     }, this))
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                lineNumber: 3473,
+                lineNumber: 3772,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 3465,
+        lineNumber: 3764,
         columnNumber: 5
     }, this);
 }
@@ -7621,14 +8043,14 @@ function ReceiptModal({ sale, onClose }) {
                                     size: 15
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3496,
+                                    lineNumber: 3795,
                                     columnNumber: 13
                                 }, this),
                                 " Print"
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3495,
+                            lineNumber: 3794,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -7641,18 +8063,18 @@ function ReceiptModal({ sale, onClose }) {
                                 size: 18
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3499,
+                                lineNumber: 3798,
                                 columnNumber: 13
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3498,
+                            lineNumber: 3797,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 3494,
+                    lineNumber: 3793,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7666,35 +8088,35 @@ function ReceiptModal({ sale, onClose }) {
                             className: "receipt-logo"
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3504,
+                            lineNumber: 3803,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                             children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["brand"].name.toUpperCase()
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3505,
+                            lineNumber: 3804,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                             children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["brand"].tagline
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3506,
+                            lineNumber: 3805,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                             children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["brand"].location
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3507,
+                            lineNumber: 3806,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                             children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["brand"].address
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3508,
+                            lineNumber: 3807,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -7704,12 +8126,12 @@ function ReceiptModal({ sale, onClose }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3509,
+                            lineNumber: 3808,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("hr", {}, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3510,
+                            lineNumber: 3809,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -7719,7 +8141,7 @@ function ReceiptModal({ sale, onClose }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3511,
+                            lineNumber: 3810,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -7729,7 +8151,7 @@ function ReceiptModal({ sale, onClose }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3512,
+                            lineNumber: 3811,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -7739,7 +8161,7 @@ function ReceiptModal({ sale, onClose }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3513,
+                            lineNumber: 3812,
                             columnNumber: 11
                         }, this),
                         sale.phone ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -7749,7 +8171,7 @@ function ReceiptModal({ sale, onClose }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3514,
+                            lineNumber: 3813,
                             columnNumber: 25
                         }, this) : null,
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -7759,7 +8181,7 @@ function ReceiptModal({ sale, onClose }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3515,
+                            lineNumber: 3814,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -7769,12 +8191,12 @@ function ReceiptModal({ sale, onClose }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3516,
+                            lineNumber: 3815,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("hr", {}, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3517,
+                            lineNumber: 3816,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7784,27 +8206,27 @@ function ReceiptModal({ sale, onClose }) {
                                     children: "ITEM"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3519,
+                                    lineNumber: 3818,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                     children: "QTY"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3520,
+                                    lineNumber: 3819,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                     children: "TOTAL"
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3521,
+                                    lineNumber: 3820,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3518,
+                            lineNumber: 3817,
                             columnNumber: 11
                         }, this),
                         sale.items.length ? sale.items.map((item)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7814,38 +8236,38 @@ function ReceiptModal({ sale, onClose }) {
                                         children: item.name
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 3526,
+                                        lineNumber: 3825,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                         children: item.quantity
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 3527,
+                                        lineNumber: 3826,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                         children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(item.price * item.quantity)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/dashboard.tsx",
-                                        lineNumber: 3528,
+                                        lineNumber: 3827,
                                         columnNumber: 17
                                     }, this)
                                 ]
                             }, `${sale.ref}-${item.id}`, true, {
                                 fileName: "[project]/src/app/admin/dashboard.tsx",
-                                lineNumber: 3525,
+                                lineNumber: 3824,
                                 columnNumber: 15
                             }, this)) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                             children: "Line items unavailable for this reprint."
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3532,
+                            lineNumber: 3831,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("hr", {}, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3534,
+                            lineNumber: 3833,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -7858,13 +8280,13 @@ function ReceiptModal({ sale, onClose }) {
                                             children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(total + sale.discount)
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3536,
+                                            lineNumber: 3835,
                                             columnNumber: 28
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3536,
+                                    lineNumber: 3835,
                                     columnNumber: 13
                                 }, this),
                                 sale.discount ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7877,13 +8299,13 @@ function ReceiptModal({ sale, onClose }) {
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3537,
+                                            lineNumber: 3836,
                                             columnNumber: 45
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3537,
+                                    lineNumber: 3836,
                                     columnNumber: 30
                                 }, this) : null,
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7893,13 +8315,13 @@ function ReceiptModal({ sale, onClose }) {
                                             children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(total)
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3538,
+                                            lineNumber: 3837,
                                             columnNumber: 25
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3538,
+                                    lineNumber: 3837,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7909,13 +8331,13 @@ function ReceiptModal({ sale, onClose }) {
                                             children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(sale.paid)
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3539,
+                                            lineNumber: 3838,
                                             columnNumber: 24
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3539,
+                                    lineNumber: 3838,
                                     columnNumber: 13
                                 }, this),
                                 change ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7925,13 +8347,13 @@ function ReceiptModal({ sale, onClose }) {
                                             children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(change)
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3540,
+                                            lineNumber: 3839,
                                             columnNumber: 36
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3540,
+                                    lineNumber: 3839,
                                     columnNumber: 23
                                 }, this) : null,
                                 balance ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -7941,48 +8363,48 @@ function ReceiptModal({ sale, onClose }) {
                                             children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$currency$2e$ts__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatGhs"])(balance)
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                                            lineNumber: 3541,
+                                            lineNumber: 3840,
                                             columnNumber: 42
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                                    lineNumber: 3541,
+                                    lineNumber: 3840,
                                     columnNumber: 24
                                 }, this) : null
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3535,
+                            lineNumber: 3834,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("hr", {}, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3543,
+                            lineNumber: 3842,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                             children: "Thank you for your patronage!"
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/dashboard.tsx",
-                            lineNumber: 3544,
+                            lineNumber: 3843,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/app/admin/dashboard.tsx",
-                    lineNumber: 3503,
+                    lineNumber: 3802,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/src/app/admin/dashboard.tsx",
-            lineNumber: 3493,
+            lineNumber: 3792,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/src/app/admin/dashboard.tsx",
-        lineNumber: 3492,
+        lineNumber: 3791,
         columnNumber: 5
     }, this);
 }

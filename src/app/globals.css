@@ -699,6 +699,14 @@ select:focus {
   font-size: 0.75rem;
 }
 
+.user-pill em {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-style: normal;
+  text-transform: capitalize;
+}
+
 .demo-banner {
   margin: 0 0 18px;
   border: 1px solid rgba(47, 95, 124, 0.24);

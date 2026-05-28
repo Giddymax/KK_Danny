@@ -4,6 +4,7 @@ export type InventoryItem = {
   category: string;
   unit: string;
   price: number;
+  costPrice: number;
   stock: number;
   threshold: number;
   supplier: string;
@@ -15,6 +16,7 @@ export type SaleItem = {
   name: string;
   quantity: number;
   price: number;
+  costPrice?: number;
 };
 
 export type Sale = {
@@ -39,6 +41,7 @@ export const inventory: InventoryItem[] = [
     category: "Cement",
     unit: "bag",
     price: 98,
+    costPrice: 82,
     stock: 146,
     threshold: 35,
     supplier: "Adeiso Depot"
@@ -49,6 +52,7 @@ export const inventory: InventoryItem[] = [
     category: "Wood",
     unit: "piece",
     price: 42,
+    costPrice: 31,
     stock: 68,
     threshold: 20,
     supplier: "Central Timber"
@@ -59,6 +63,7 @@ export const inventory: InventoryItem[] = [
     category: "Steel rods",
     unit: "length",
     price: 115,
+    costPrice: 96,
     stock: 18,
     threshold: 25,
     supplier: "Eastern Steel"
@@ -69,6 +74,7 @@ export const inventory: InventoryItem[] = [
     category: "Paint",
     unit: "bucket",
     price: 185,
+    costPrice: 142,
     stock: 32,
     threshold: 12,
     supplier: "Paint House Ghana"
@@ -79,6 +85,7 @@ export const inventory: InventoryItem[] = [
     category: "Hardware",
     unit: "box",
     price: 58,
+    costPrice: 43,
     stock: 54,
     threshold: 16,
     supplier: "Hardware Market"
@@ -89,6 +96,7 @@ export const inventory: InventoryItem[] = [
     category: "Equipment services",
     unit: "hour",
     price: 220,
+    costPrice: 0,
     stock: 0,
     threshold: 0,
     supplier: "In-house",
@@ -106,8 +114,8 @@ export const recentSales: Sale[] = [
     staff: "Admin",
     status: "Paid",
     items: [
-      { id: "cement-ghacem", name: "Ghacem Cement", quantity: 12, price: 98 },
-      { id: "nails-4-inch", name: "4 Inch Nails", quantity: 2, price: 58 }
+      { id: "cement-ghacem", name: "Ghacem Cement", quantity: 12, price: 98, costPrice: 82 },
+      { id: "nails-4-inch", name: "4 Inch Nails", quantity: 2, price: 58, costPrice: 43 }
     ],
     discount: 20,
     paid: 1272
@@ -120,7 +128,7 @@ export const recentSales: Sale[] = [
     method: "Mobile Money",
     staff: "Staff",
     status: "Part paid",
-    items: [{ id: "rod-12mm", name: "Reinforcement Rod 12mm", quantity: 15, price: 115 }],
+    items: [{ id: "rod-12mm", name: "Reinforcement Rod 12mm", quantity: 15, price: 115, costPrice: 96 }],
     discount: 0,
     paid: 1200,
     notes: "Balance due after delivery."
@@ -134,8 +142,8 @@ export const recentSales: Sale[] = [
     staff: "Admin",
     status: "Paid",
     items: [
-      { id: "paint-savanna", name: "Savanna Paint", quantity: 8, price: 185 },
-      { id: "wood-2x4", name: "Treated Wood 2x4", quantity: 20, price: 42 }
+      { id: "paint-savanna", name: "Savanna Paint", quantity: 8, price: 185, costPrice: 142 },
+      { id: "wood-2x4", name: "Treated Wood 2x4", quantity: 20, price: 42, costPrice: 31 }
     ],
     discount: 50,
     paid: 2270

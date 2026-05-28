@@ -62,6 +62,7 @@ create table if not exists public.products (
   image_path text,
   unit text not null default 'item',
   price numeric(12,2) not null default 0,
+  cost_price numeric(12,2) not null default 0 check (cost_price >= 0),
   stock numeric(12,2) not null default 0,
   threshold numeric(12,2) not null default 0,
   is_service boolean not null default false,
@@ -76,6 +77,7 @@ create table if not exists public.inventory_items (
   category text not null,
   unit text not null default 'item',
   price numeric(12,2) not null default 0 check (price >= 0),
+  cost_price numeric(12,2) not null default 0 check (cost_price >= 0),
   stock numeric(12,2) not null default 0 check (stock >= 0),
   threshold numeric(12,2) not null default 0 check (threshold >= 0),
   supplier text,
@@ -126,6 +128,7 @@ create table if not exists public.sale_items (
   item_name text not null,
   quantity numeric(12,2) not null default 1,
   unit_price numeric(12,2) not null default 0,
+  unit_cost numeric(12,2) not null default 0 check (unit_cost >= 0),
   line_total numeric(12,2) not null default 0,
   created_at timestamptz not null default now()
 );
@@ -208,6 +211,9 @@ alter table public.customers
 alter table public.sales
   add column if not exists active boolean not null default true;
 
+alter table public.sale_items
+  add column if not exists unit_cost numeric(12,2) not null default 0 check (unit_cost >= 0);
+
 alter table public.purchases
   add column if not exists item_name text not null default '',
   add column if not exists supplier_name text,
@@ -220,8 +226,24 @@ alter table public.quote_requests
   add column if not exists active boolean not null default true;
 
 alter table public.inventory_items
+  add column if not exists cost_price numeric(12,2) not null default 0 check (cost_price >= 0),
   add column if not exists created_by uuid references public.profiles(id),
   add column if not exists active boolean not null default true;
+
+alter table public.products
+  add column if not exists cost_price numeric(12,2) not null default 0 check (cost_price >= 0);
+
+update public.inventory_items
+set cost_price = price
+where cost_price = 0 and price > 0;
+
+update public.products
+set cost_price = price
+where cost_price = 0 and price > 0;
+
+update public.sale_items
+set unit_cost = unit_price
+where unit_cost = 0 and unit_price > 0;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -337,36 +359,80 @@ create policy "admins manage suppliers" on public.suppliers
 for all using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "staff manage products" on public.products;
-create policy "staff manage products" on public.products
-for all using (public.is_staff()) with check (public.is_staff());
+drop policy if exists "staff read products" on public.products;
+create policy "staff read products" on public.products
+for select using (public.is_staff());
+drop policy if exists "admins manage products" on public.products;
+create policy "admins manage products" on public.products
+for all using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "staff manage inventory items" on public.inventory_items;
-create policy "staff manage inventory items" on public.inventory_items
-for all using (public.is_staff()) with check (public.is_staff());
+drop policy if exists "staff read inventory items" on public.inventory_items;
+drop policy if exists "staff update inventory items" on public.inventory_items;
+create policy "staff read inventory items" on public.inventory_items
+for select using (public.is_staff());
+create policy "staff update inventory items" on public.inventory_items
+for update using (public.is_staff()) with check (public.is_staff());
+drop policy if exists "admins manage inventory items" on public.inventory_items;
+create policy "admins manage inventory items" on public.inventory_items
+for all using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "staff manage customers" on public.customers;
-create policy "staff manage customers" on public.customers
-for all using (public.is_staff()) with check (public.is_staff());
+drop policy if exists "staff read customers" on public.customers;
+create policy "staff read customers" on public.customers
+for select using (public.is_staff());
+drop policy if exists "admins manage customers" on public.customers;
+create policy "admins manage customers" on public.customers
+for all using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "staff manage sales" on public.sales;
-create policy "staff manage sales" on public.sales
-for all using (public.is_staff()) with check (public.is_staff());
+drop policy if exists "staff read sales" on public.sales;
+drop policy if exists "staff insert sales" on public.sales;
+create policy "staff read sales" on public.sales
+for select using (public.is_staff());
+create policy "staff insert sales" on public.sales
+for insert with check (public.is_staff());
+drop policy if exists "admins manage sales" on public.sales;
+create policy "admins manage sales" on public.sales
+for all using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "staff manage sale items" on public.sale_items;
-create policy "staff manage sale items" on public.sale_items
-for all using (public.is_staff()) with check (public.is_staff());
+drop policy if exists "staff read sale items" on public.sale_items;
+drop policy if exists "staff insert sale items" on public.sale_items;
+create policy "staff read sale items" on public.sale_items
+for select using (public.is_staff());
+create policy "staff insert sale items" on public.sale_items
+for insert with check (public.is_staff());
+drop policy if exists "admins manage sale items" on public.sale_items;
+create policy "admins manage sale items" on public.sale_items
+for all using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "staff manage purchases" on public.purchases;
-create policy "staff manage purchases" on public.purchases
-for all using (public.is_staff()) with check (public.is_staff());
+drop policy if exists "staff read purchases" on public.purchases;
+create policy "staff read purchases" on public.purchases
+for select using (public.is_staff());
+drop policy if exists "admins manage purchases" on public.purchases;
+create policy "admins manage purchases" on public.purchases
+for all using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "staff manage expenses" on public.expenses;
-create policy "staff manage expenses" on public.expenses
-for all using (public.is_staff()) with check (public.is_staff());
+drop policy if exists "staff read expenses" on public.expenses;
+create policy "staff read expenses" on public.expenses
+for select using (public.is_staff());
+drop policy if exists "admins manage expenses" on public.expenses;
+create policy "admins manage expenses" on public.expenses
+for all using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "staff manage quotes" on public.quote_requests;
-create policy "staff manage quotes" on public.quote_requests
-for all using (public.is_staff()) with check (public.is_staff());
+drop policy if exists "staff read quotes" on public.quote_requests;
+drop policy if exists "staff insert quotes" on public.quote_requests;
+create policy "staff read quotes" on public.quote_requests
+for select using (public.is_staff());
+create policy "staff insert quotes" on public.quote_requests
+for insert with check (public.is_staff());
+drop policy if exists "admins manage quotes" on public.quote_requests;
+create policy "admins manage quotes" on public.quote_requests
+for all using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "staff read payment methods" on public.payment_methods;
 create policy "staff read payment methods" on public.payment_methods
@@ -376,8 +442,6 @@ create policy "admins manage payment methods" on public.payment_methods
 for all using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "staff read settings" on public.business_settings;
-create policy "staff read settings" on public.business_settings
-for select using (public.is_staff());
 drop policy if exists "admins manage settings" on public.business_settings;
 create policy "admins manage settings" on public.business_settings
 for all using (public.is_admin()) with check (public.is_admin());
@@ -437,13 +501,13 @@ insert into public.payment_methods (name, sort_order) values
   ('Card', 40)
 on conflict (name) do nothing;
 
-insert into public.inventory_items (name, category, unit, price, stock, threshold, supplier, is_service) values
-  ('Ghacem Cement', 'Cement', 'bag', 98, 146, 35, 'Adeiso Depot', false),
-  ('Treated Wood 2x4', 'Wood', 'piece', 42, 68, 20, 'Central Timber', false),
-  ('Reinforcement Rod 12mm', 'Steel rods', 'length', 115, 18, 25, 'Eastern Steel', false),
-  ('Savanna Paint', 'Paint', 'bucket', 185, 32, 12, 'Paint House Ghana', false),
-  ('4 Inch Nails', 'Hardware', 'box', 58, 54, 16, 'Hardware Market', false),
-  ('Concrete Mixer Service', 'Equipment services', 'hour', 220, 0, 0, 'In-house', true)
+insert into public.inventory_items (name, category, unit, price, cost_price, stock, threshold, supplier, is_service) values
+  ('Ghacem Cement', 'Cement', 'bag', 98, 82, 146, 35, 'Adeiso Depot', false),
+  ('Treated Wood 2x4', 'Wood', 'piece', 42, 31, 68, 20, 'Central Timber', false),
+  ('Reinforcement Rod 12mm', 'Steel rods', 'length', 115, 96, 18, 25, 'Eastern Steel', false),
+  ('Savanna Paint', 'Paint', 'bucket', 185, 142, 32, 12, 'Paint House Ghana', false),
+  ('4 Inch Nails', 'Hardware', 'box', 58, 43, 54, 16, 'Hardware Market', false),
+  ('Concrete Mixer Service', 'Equipment services', 'hour', 220, 0, 0, 0, 'In-house', true)
 on conflict (name) do nothing;
 
 insert into public.customers (name, phone, balance, visits)
@@ -476,10 +540,10 @@ select
   purchase_date::date,
   notes
 from (values
-  ('Ghacem Cement', 'Adeiso Depot', 146, 98, 14308, '2026-05-19', 'Initial stock intake'),
-  ('Treated Wood 2x4', 'Central Timber', 68, 42, 2856, '2026-05-18', 'Initial stock intake'),
-  ('Reinforcement Rod 12mm', 'Eastern Steel', 18, 115, 2070, '2026-05-17', 'Initial stock intake'),
-  ('Savanna Paint', 'Paint House Ghana', 32, 185, 5920, '2026-05-16', 'Initial stock intake')
+  ('Ghacem Cement', 'Adeiso Depot', 146, 82, 11972, '2026-05-19', 'Initial stock intake'),
+  ('Treated Wood 2x4', 'Central Timber', 68, 31, 2108, '2026-05-18', 'Initial stock intake'),
+  ('Reinforcement Rod 12mm', 'Eastern Steel', 18, 96, 1728, '2026-05-17', 'Initial stock intake'),
+  ('Savanna Paint', 'Paint House Ghana', 32, 142, 4544, '2026-05-16', 'Initial stock intake')
 ) as seed(item_name, supplier_name, quantity, unit_cost, total_cost, purchase_date, notes)
 where not exists (
   select 1 from public.purchases

@@ -45,16 +45,19 @@ import {
 type AdminDashboardProps = {
   userEmail: string;
   userName: string;
+  userRole: AppRole;
   isDemo: boolean;
 };
 
 type CartLine = SaleItem;
+type AppRole = "admin" | "staff";
 
 type InventoryFormState = {
   name: string;
   category: string;
   unit: string;
   price: string;
+  costPrice: string;
   stock: string;
   threshold: string;
   supplier: string;
@@ -67,6 +70,7 @@ type InventoryRow = {
   category: string;
   unit: string;
   price: number | string;
+  cost_price?: number | string | null;
   stock: number | string;
   threshold: number | string;
   supplier: string | null;
@@ -78,6 +82,7 @@ type SaleItemRow = {
   item_name: string;
   quantity: number | string;
   unit_price: number | string;
+  unit_cost?: number | string | null;
 };
 
 type SaleRow = {
@@ -207,12 +212,39 @@ const navItems = [
   { key: "settings", label: "Settings", icon: Settings }
 ] as const;
 
+type NavKey = (typeof navItems)[number]["key"];
+
+const staffHiddenSections = new Set<NavKey>(["dashboard", "reports", "staff", "settings"]);
+
+function navForRole(role: AppRole) {
+  return role === "admin" ? navItems : navItems.filter((item) => !staffHiddenSections.has(item.key));
+}
+
 function saleTotal(sale: Sale) {
   if (typeof sale.total === "number") {
     return sale.total;
   }
 
   return sale.items.reduce((sum, item) => sum + item.price * item.quantity, 0) - sale.discount;
+}
+
+function saleCost(sale: Sale) {
+  return sale.items.reduce((sum, item) => {
+    const unitCost = Number.isFinite(Number(item.costPrice)) ? Number(item.costPrice) : item.price;
+    return sum + unitCost * item.quantity;
+  }, 0);
+}
+
+function saleProfit(sale: Sale) {
+  return saleTotal(sale) - saleCost(sale);
+}
+
+function profitMargin(profit: number, revenue: number) {
+  return revenue > 0 ? (profit / revenue) * 100 : 0;
+}
+
+function formatPercent(value: number) {
+  return `${value.toFixed(1)}%`;
 }
 
 function parseSaleDate(dateStr: string): Date | null {
@@ -256,6 +288,7 @@ function inventoryRowToItem(row: InventoryRow): InventoryItem {
     category: row.category,
     unit: row.unit,
     price: Number(row.price),
+    costPrice: Number.isFinite(Number(row.cost_price)) ? Number(row.cost_price) : Number(row.price),
     stock: Number(row.stock),
     threshold: Number(row.threshold),
     supplier: row.supplier ?? "",
@@ -269,6 +302,7 @@ function inventoryItemToForm(item?: InventoryItem): InventoryFormState {
     category: item?.category ?? "",
     unit: item?.unit ?? "item",
     price: String(item?.price ?? ""),
+    costPrice: String(item?.costPrice ?? item?.price ?? ""),
     stock: String(item?.stock ?? "0"),
     threshold: String(item?.threshold ?? "0"),
     supplier: item?.supplier ?? "",
@@ -302,6 +336,7 @@ function readStoredDemoInventory() {
         category: typeof item.category === "string" ? item.category : "",
         unit: typeof item.unit === "string" && item.unit ? item.unit : "item",
         price: Number.isFinite(Number(item.price)) ? Number(item.price) : 0,
+        costPrice: Number.isFinite(Number(item.costPrice)) ? Number(item.costPrice) : Number(item.price) || 0,
         stock: Number.isFinite(Number(item.stock)) ? Number(item.stock) : 0,
         threshold: Number.isFinite(Number(item.threshold)) ? Number(item.threshold) : 0,
         supplier: typeof item.supplier === "string" ? item.supplier : "",
@@ -387,7 +422,8 @@ function saleItemRowsToCart(items: SaleItemRow[] | undefined): CartLine[] {
       id: item.id,
       name: item.item_name,
       quantity: Number.isFinite(Number(item.quantity)) ? Number(item.quantity) : 1,
-      price: Number.isFinite(Number(item.unit_price)) ? Number(item.unit_price) : 0
+      price: Number.isFinite(Number(item.unit_price)) ? Number(item.unit_price) : 0,
+      costPrice: Number.isFinite(Number(item.unit_cost)) ? Number(item.unit_cost) : Number(item.unit_price) || 0
     }));
 }
 
@@ -411,7 +447,8 @@ function parseQuoteDetails(value: unknown): { totalAmount: number; items: CartLi
             id: item.id,
             name: item.name,
             quantity: Number.isFinite(Number(item.quantity)) ? Number(item.quantity) : 1,
-            price: Number.isFinite(Number(item.price)) ? Number(item.price) : 0
+            price: Number.isFinite(Number(item.price)) ? Number(item.price) : 0,
+            costPrice: Number.isFinite(Number(item.costPrice)) ? Number(item.costPrice) : Number(item.price) || 0
           }))
       : [];
     return {
@@ -446,7 +483,8 @@ function quoteRecordToCart(quote?: QuoteRecord): CartLine[] {
     id: `quote-${index}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
     name,
     quantity: quantities[index] ?? 1,
-    price: index === 0 && quote.totalAmount > 0 ? quote.totalAmount / (quantities[index] || 1) : 0
+    price: index === 0 && quote.totalAmount > 0 ? quote.totalAmount / (quantities[index] || 1) : 0,
+    costPrice: 0
   }));
 }
 
@@ -536,8 +574,11 @@ function settingsToFields(settings: SettingsRecord): ManagedField[] {
   ];
 }
 
-export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardProps) {
-  const [active, setActive] = useState<(typeof navItems)[number]["key"]>("dashboard");
+export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminDashboardProps) {
+  const isAdmin = userRole === "admin";
+  const visibleNavItems = useMemo(() => navForRole(userRole), [userRole]);
+  const defaultSection = visibleNavItems[0]?.key ?? "pos";
+  const [active, setActive] = useState<NavKey>(defaultSection);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customer, setCustomer] = useState("Walk-in");
@@ -566,7 +607,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
       name: item.name,
       category: item.supplier,
       quantity: item.stock,
-      unitCost: item.price,
+      unitCost: item.costPrice,
       date: "2026-05-19",
       active: true
     })) : []
@@ -633,10 +674,18 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
   const lowStock = inventoryItems.filter((item) => !item.isService && item.stock <= item.threshold);
   const dashboardSales = salesRecords.filter((sale) => isWithinReportPeriod(sale.date, dashboardPeriod));
   const dashboardRevenue = dashboardSales.reduce((sum, sale) => sum + saleTotal(sale), 0);
+  const dashboardProfit = dashboardSales.reduce((sum, sale) => sum + saleProfit(sale), 0);
+  const dashboardMargin = profitMargin(dashboardProfit, dashboardRevenue);
   const dashboardSalesCount = dashboardSales.length;
   const dashboardDiscount = dashboardSales.reduce((sum, sale) => sum + sale.discount, 0);
   const pendingQuotesCount = quoteRecords.filter((q) => q.status === "New").length;
-  const activeLabel = navItems.find((item) => item.key === active)?.label ?? "Dashboard";
+  const activeLabel = visibleNavItems.find((item) => item.key === active)?.label ?? visibleNavItems[0]?.label ?? "POS";
+
+  useEffect(() => {
+    if (!visibleNavItems.some((item) => item.key === active)) {
+      setActive(defaultSection);
+    }
+  }, [active, defaultSection, visibleNavItems]);
 
   useEffect(() => {
     if (!isDemo) {
@@ -666,7 +715,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
 
       const { data, error } = await supabase
         .from("inventory_items")
-        .select("id,name,category,unit,price,stock,threshold,supplier,is_service")
+        .select("id,name,category,unit,price,cost_price,stock,threshold,supplier,is_service")
         .eq("active", true)
         .order("name", { ascending: true });
 
@@ -697,7 +746,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
         supabase.from("expenses").select("id,category,amount,expense_date,payment_method,notes,active").eq("active", true).order("expense_date", { ascending: false }),
         supabase.from("quote_requests").select("id,customer_name,phone,requested_items,quantity,details,status,active").eq("active", true).order("created_at", { ascending: false }),
         supabase.from("customers").select("id,name,phone,balance,visits,active").eq("active", true).order("name", { ascending: true }),
-        supabase.from("sales").select("id,sale_ref,customer_name,customer_phone,payment_method,status,total,amount_paid,discount,notes,created_at,active,sale_items(id,item_name,quantity,unit_price)").eq("active", true).order("created_at", { ascending: false }),
+        supabase.from("sales").select("id,sale_ref,customer_name,customer_phone,payment_method,status,total,amount_paid,discount,notes,created_at,active,sale_items(id,item_name,quantity,unit_price,unit_cost)").eq("active", true).order("created_at", { ascending: false }),
         supabase.from("profiles").select("id,email,full_name,role,is_active").order("email", { ascending: true }),
         supabase.from("business_settings").select("key,value").in("key", ["profile", "receipt"])
       ]);
@@ -853,12 +902,17 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
           line.id === item.id ? { ...line, quantity: line.quantity + 1 } : line
         );
       }
-      return [...current, { id: item.id, name: item.name, quantity: 1, price: item.price }];
+      return [...current, { id: item.id, name: item.name, quantity: 1, price: item.price, costPrice: item.costPrice }];
     });
     setManagedStatus("");
   }
 
   function openInventoryForm(item?: InventoryItem) {
+    if (!isAdmin) {
+      setInventoryStatus("Only admin accounts can change inventory items.");
+      return;
+    }
+
     setEditingItem(item ?? null);
     setInventoryForm(inventoryItemToForm(item));
     setInventoryStatus("");
@@ -880,11 +934,12 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
     const category = inventoryForm.category.trim();
     const unit = inventoryForm.unit.trim() || "item";
     const price = Number(inventoryForm.price);
+    const costPrice = Number(inventoryForm.costPrice);
     const stock = Number(inventoryForm.stock);
     const threshold = Number(inventoryForm.threshold);
 
-    if (!name || !category || !Number.isFinite(price) || !Number.isFinite(stock) || !Number.isFinite(threshold)) {
-      setInventoryStatus("Enter a name, category, and valid numbers for price, stock, and threshold.");
+    if (!name || !category || !Number.isFinite(price) || !Number.isFinite(costPrice) || !Number.isFinite(stock) || !Number.isFinite(threshold)) {
+      setInventoryStatus("Enter a name, category, and valid numbers for selling price, cost price, stock, and threshold.");
       return;
     }
 
@@ -894,6 +949,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
       category,
       unit,
       price: Math.max(price, 0),
+      costPrice: Math.max(costPrice, 0),
       stock: Math.max(stock, 0),
       threshold: Math.max(threshold, 0),
       supplier: inventoryForm.supplier.trim(),
@@ -926,6 +982,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
       category: item.category,
       unit: item.unit,
       price: item.price,
+      cost_price: item.costPrice,
       stock: item.stock,
       threshold: item.threshold,
       supplier: item.supplier,
@@ -937,12 +994,12 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
           .from("inventory_items")
           .update(payload)
           .eq("id", editingItem.id)
-          .select("id,name,category,unit,price,stock,threshold,supplier,is_service")
+          .select("id,name,category,unit,price,cost_price,stock,threshold,supplier,is_service")
           .single()
       : supabase
           .from("inventory_items")
           .insert(payload)
-          .select("id,name,category,unit,price,stock,threshold,supplier,is_service")
+          .select("id,name,category,unit,price,cost_price,stock,threshold,supplier,is_service")
           .single();
 
     const { data, error } = await query;
@@ -966,6 +1023,11 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
   }
 
   async function deleteInventoryItem(item: InventoryItem) {
+    if (!isAdmin) {
+      setInventoryStatus("Only admin accounts can delete inventory items.");
+      return;
+    }
+
     const confirmed = window.confirm(`Delete ${item.name} from inventory?`);
 
     if (!confirmed) {
@@ -1001,6 +1063,16 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
   }
 
   function openManagedEditor(kind: ManagedKind, itemId?: string) {
+    if (!isAdmin && itemId) {
+      setManagedStatus("Only admin accounts can edit records.");
+      return;
+    }
+
+    if (!isAdmin && (kind === "staff" || kind === "settings")) {
+      setManagedStatus("Only admin accounts can access that section.");
+      return;
+    }
+
     const titlePrefix = itemId ? "Edit" : "Add";
 
     if (kind === "sale") {
@@ -1046,6 +1118,11 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
   }
 
   function openQuoteEditor(quote?: QuoteRecord) {
+    if (!isAdmin && quote) {
+      setManagedStatus("Only admin accounts can edit quotes.");
+      return;
+    }
+
     setEditingQuote(quote ?? null);
     setQuoteCustomer(quote?.customer ?? "");
     setQuotePhone(quote?.phone ?? "");
@@ -1074,7 +1151,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
           line.id === item.id ? { ...line, quantity: line.quantity + 1 } : line
         );
       }
-      return [...current, { id: item.id, name: item.name, quantity: 1, price: item.price }];
+      return [...current, { id: item.id, name: item.name, quantity: 1, price: item.price, costPrice: item.costPrice }];
     });
     setManagedStatus("");
   }
@@ -1177,6 +1254,18 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
 
   async function saveManagedRecord() {
     if (!managedEditor) {
+      return;
+    }
+
+    if (!isAdmin && managedEditor.itemId) {
+      setManagedStatus("Only admin accounts can edit records.");
+      setManagedPending(false);
+      return;
+    }
+
+    if (!isAdmin && (managedEditor.kind === "staff" || managedEditor.kind === "settings")) {
+      setManagedStatus("Only admin accounts can access that section.");
+      setManagedPending(false);
       return;
     }
 
@@ -1296,6 +1385,8 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
         } else {
           await adjustInventoryByItemName(purchase.name, purchase.quantity);
         }
+
+        await updateInventoryCostByItemName(purchase.name, purchase.unitCost);
 
         setPurchaseRecords((current) =>
           managedEditor.itemId ? current.map((entry) => (entry.id === managedEditor.itemId ? purchase : entry)) : [purchase, ...current]
@@ -1473,6 +1564,11 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
   }
 
   async function deleteManagedRecord(kind: ManagedKind, itemId: string, label: string) {
+    if (!isAdmin) {
+      setManagedStatus("Only admin accounts can delete records.");
+      return;
+    }
+
     if (!window.confirm(`Delete ${label}?`)) {
       return;
     }
@@ -1619,7 +1715,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
       .from("inventory_items")
       .update({ stock })
       .eq("id", itemId)
-      .select("id,name,category,unit,price,stock,threshold,supplier,is_service")
+      .select("id,name,category,unit,price,cost_price,stock,threshold,supplier,is_service")
       .single();
 
     if (error) {
@@ -1643,6 +1739,50 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
     }
 
     await updateInventoryStock(item.id, item.stock + quantityDelta);
+  }
+
+  async function updateInventoryCostByItemName(itemName: string, nextCostPrice: number) {
+    if (!itemName.trim() || !Number.isFinite(nextCostPrice) || nextCostPrice <= 0) {
+      return;
+    }
+
+    const item = inventoryItems.find((entry) => sameItemName(entry.name, itemName));
+
+    if (!item || item.isService) {
+      return;
+    }
+
+    const costPrice = Math.max(nextCostPrice, 0);
+
+    if (isDemo) {
+      setInventoryItems((current) => {
+        const next = current.map((entry) => (entry.id === item.id ? { ...entry, costPrice } : entry));
+        writeStoredDemoInventory(next);
+        return next;
+      });
+      return;
+    }
+
+    const supabase = createBrowserSupabaseClient();
+
+    if (!supabase) {
+      throw new Error("Supabase keys are not set.");
+    }
+
+    const { data, error } = await supabase
+      .from("inventory_items")
+      .update({ cost_price: costPrice })
+      .eq("id", item.id)
+      .select("id,name,category,unit,price,cost_price,stock,threshold,supplier,is_service")
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    setInventoryItems((current) =>
+      current.map((entry) => (entry.id === item.id ? inventoryRowToItem(data) : entry))
+    );
   }
 
   async function restoreInventoryForDeletedSale(sale: Sale) {
@@ -1747,6 +1887,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
             item_name: item.name,
             quantity: item.quantity,
             unit_price: item.price,
+            unit_cost: item.costPrice ?? item.price,
             line_total: item.quantity * item.price
           }))
         );
@@ -1813,7 +1954,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
         </div>
 
         <nav className="side-nav" aria-label="Admin navigation">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             return (
               <button
@@ -1864,6 +2005,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
             <div className="user-pill">
               <span>{isDemo ? "Demo preview" : "Signed in"}</span>
               <strong>{userEmail}</strong>
+              <em>{userRole}</em>
             </div>
             <button
               type="button"
@@ -1887,8 +2029,8 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
         <div className="mobile-section-select">
           <label>
             <span>Section</span>
-            <select value={active} onChange={(event) => setActive(event.target.value as typeof active)}>
-              {navItems.map((item) => (
+            <select value={active} onChange={(event) => setActive(event.target.value as NavKey)}>
+              {visibleNavItems.map((item) => (
                 <option key={item.key} value={item.key}>
                   {item.label}
                 </option>
@@ -1897,9 +2039,11 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
           </label>
         </div>
 
-        {active === "dashboard" ? (
+        {isAdmin && active === "dashboard" ? (
           <DashboardOverview
             revenue={dashboardRevenue}
+            profit={dashboardProfit}
+            margin={dashboardMargin}
             lowStockCount={lowStock.length}
             sales={dashboardSales}
             salesCount={dashboardSalesCount}
@@ -1953,8 +2097,8 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
           <SalesPanel
             sales={salesRecords}
             onAdd={() => setActive("pos")}
-            onEdit={(sale) => openManagedEditor("sale", sale.ref)}
-            onDelete={(sale) => deleteManagedRecord("sale", sale.ref, sale.ref)}
+            onEdit={isAdmin ? (sale) => openManagedEditor("sale", sale.ref) : undefined}
+            onDelete={isAdmin ? (sale) => deleteManagedRecord("sale", sale.ref, sale.ref) : undefined}
             onReceipt={openSaleReceipt}
           />
         ) : null}
@@ -1962,53 +2106,53 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
           <InventoryPanel
             items={inventoryItems}
             status={inventoryStatus}
-            onAdd={() => openInventoryForm()}
-            onEdit={openInventoryForm}
-            onDelete={deleteInventoryItem}
+            onAdd={isAdmin ? () => openInventoryForm() : undefined}
+            onEdit={isAdmin ? openInventoryForm : undefined}
+            onDelete={isAdmin ? deleteInventoryItem : undefined}
           />
         ) : null}
         {active === "suppliers" ? (
           <SuppliersPanel
             rows={supplierRecords}
-            onAdd={() => openManagedEditor("supplier")}
-            onEdit={(row) => openManagedEditor("supplier", row.id)}
-            onDelete={(row) => deleteManagedRecord("supplier", row.id, row.name)}
+            onAdd={isAdmin ? () => openManagedEditor("supplier") : undefined}
+            onEdit={isAdmin ? (row) => openManagedEditor("supplier", row.id) : undefined}
+            onDelete={isAdmin ? (row) => deleteManagedRecord("supplier", row.id, row.name) : undefined}
           />
         ) : null}
         {active === "purchases" ? (
           <PurchasesPanel
             rows={purchaseRecords}
-            onAdd={() => openManagedEditor("purchase")}
-            onEdit={(row) => openManagedEditor("purchase", row.id)}
-            onDelete={(row) => deleteManagedRecord("purchase", row.id, row.name)}
+            onAdd={isAdmin ? () => openManagedEditor("purchase") : undefined}
+            onEdit={isAdmin ? (row) => openManagedEditor("purchase", row.id) : undefined}
+            onDelete={isAdmin ? (row) => deleteManagedRecord("purchase", row.id, row.name) : undefined}
           />
         ) : null}
         {active === "expenses" ? (
           <ExpensesPanel
             rows={expenseRecords}
-            onAdd={() => openManagedEditor("expense")}
-            onEdit={(row) => openManagedEditor("expense", row.id)}
-            onDelete={(row) => deleteManagedRecord("expense", row.id, row.category)}
+            onAdd={isAdmin ? () => openManagedEditor("expense") : undefined}
+            onEdit={isAdmin ? (row) => openManagedEditor("expense", row.id) : undefined}
+            onDelete={isAdmin ? (row) => deleteManagedRecord("expense", row.id, row.category) : undefined}
           />
         ) : null}
         {active === "quotes" ? (
           <QuotesPanel
             rows={quoteRecords}
             onAdd={() => openQuoteEditor()}
-            onEdit={openQuoteEditor}
-            onDelete={(row) => deleteManagedRecord("quote", row.id, row.customer)}
+            onEdit={isAdmin ? openQuoteEditor : undefined}
+            onDelete={isAdmin ? (row) => deleteManagedRecord("quote", row.id, row.customer) : undefined}
             onPrint={setQuotePreview}
           />
         ) : null}
         {active === "customers" ? (
           <CustomersPanel
             rows={customerRecords}
-            onAdd={() => openManagedEditor("customer")}
-            onEdit={(row) => openManagedEditor("customer", row.id)}
-            onDelete={(row) => deleteManagedRecord("customer", row.id, row.name)}
+            onAdd={isAdmin ? () => openManagedEditor("customer") : undefined}
+            onEdit={isAdmin ? (row) => openManagedEditor("customer", row.id) : undefined}
+            onDelete={isAdmin ? (row) => deleteManagedRecord("customer", row.id, row.name) : undefined}
           />
         ) : null}
-        {active === "reports" ? (
+        {isAdmin && active === "reports" ? (
           <ReportsPanel
             inventoryItems={inventoryItems}
             salesRecords={salesRecords}
@@ -2017,7 +2161,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
             staffRecords={staffRecords}
           />
         ) : null}
-        {active === "staff" ? (
+        {isAdmin && active === "staff" ? (
           <StaffPanel
             rows={staffRecords}
             onAdd={() => openManagedEditor("staff")}
@@ -2025,7 +2169,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
             onDelete={(row) => deleteManagedRecord("staff", row.id, row.name)}
           />
         ) : null}
-        {active === "settings" ? <SettingsPanel settings={settingsRecord} onEdit={() => openManagedEditor("settings")} /> : null}
+        {isAdmin && active === "settings" ? <SettingsPanel settings={settingsRecord} onEdit={() => openManagedEditor("settings")} /> : null}
       </section>
 
       {receipt ? <ReceiptModal sale={receipt} onClose={() => setReceipt(null)} /> : null}
@@ -2074,6 +2218,8 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
 
 function DashboardOverview({
   revenue,
+  profit,
+  margin,
   lowStockCount,
   sales,
   salesCount,
@@ -2087,6 +2233,8 @@ function DashboardOverview({
   onReprintReceipt
 }: {
   revenue: number;
+  profit: number;
+  margin: number;
   lowStockCount: number;
   sales: Sale[];
   salesCount: number;
@@ -2127,6 +2275,8 @@ function DashboardOverview({
       </div>
 
       <MetricCard icon={BadgeDollarSign} label="Revenue" value={formatGhs(revenue)} tone="green" />
+      <MetricCard icon={BadgeDollarSign} label="Gross profit" value={revenue > 0 ? formatGhs(profit) : "—"} tone="green" />
+      <MetricCard icon={BadgeDollarSign} label="Profit margin" value={revenue > 0 ? formatPercent(margin) : "—"} tone="blue" />
       <MetricCard icon={ReceiptText} label="Sales" value={`${salesCount} receipt${salesCount !== 1 ? "s" : ""}`} tone="gold" />
       <MetricCard icon={CreditCard} label="Discounts" value={discount > 0 ? formatGhs(discount) : "—"} tone="blue" />
       <MetricCard icon={ClipboardList} label="Pending quotes" value={`${pendingQuotesCount} open`} tone="blue" />
@@ -2509,8 +2659,8 @@ function SalesPanel({
 }: {
   sales: Sale[];
   onAdd: () => void;
-  onEdit: (sale: Sale) => void;
-  onDelete: (sale: Sale) => void;
+  onEdit?: (sale: Sale) => void;
+  onDelete?: (sale: Sale) => void;
   onReceipt: (sale: Sale) => void;
 }) {
   return (
@@ -2551,6 +2701,7 @@ function ResponsiveSalesTable({
             <th>Method</th>
             <th>Status</th>
             <th>Total</th>
+            <th>Profit</th>
             <th>Paid</th>
             <th>Balance</th>
             <th>Action</th>
@@ -2559,6 +2710,7 @@ function ResponsiveSalesTable({
         <tbody>
           {sales.map((sale) => {
             const total = saleTotal(sale);
+            const profit = saleProfit(sale);
             const balance = total - sale.paid;
             return (
             <tr key={sale.ref}>
@@ -2572,6 +2724,7 @@ function ResponsiveSalesTable({
                 </span>
               </td>
               <td data-label="Total">{formatGhs(total)}</td>
+              <td data-label="Profit">{formatGhs(profit)}</td>
               <td data-label="Paid">{formatGhs(sale.paid)}</td>
               <td data-label="Balance" className={balance > 0 ? "text-amber-700 font-semibold" : balance < 0 ? "text-red-700 font-semibold" : ""}>
                 {balance > 0 ? `${formatGhs(balance)}` : balance < 0 ? `Overpaid: ${formatGhs(Math.abs(balance))}` : "Paid"}
@@ -2611,9 +2764,9 @@ function InventoryPanel({
 }: {
   items: InventoryItem[];
   status: string;
-  onAdd: () => void;
-  onEdit: (item: InventoryItem) => void;
-  onDelete: (item: InventoryItem) => void;
+  onAdd?: () => void;
+  onEdit?: (item: InventoryItem) => void;
+  onDelete?: (item: InventoryItem) => void;
 }) {
   return (
     <section className="panel">
@@ -2622,9 +2775,11 @@ function InventoryPanel({
           <p className="eyebrow">Stock control</p>
           <h2>Inventory</h2>
         </div>
-        <button type="button" className="small-action" onClick={onAdd}>
-          <PackagePlus size={15} /> Add item
-        </button>
+        {onAdd ? (
+          <button type="button" className="small-action" onClick={onAdd}>
+            <PackagePlus size={15} /> Add item
+          </button>
+        ) : null}
       </div>
       {status ? (
         <div className="inline-alert" role="status">
@@ -2641,27 +2796,34 @@ function InventoryPanel({
             </div>
             <div className="inventory-meta">
               <strong>{formatGhs(item.price)}</strong>
+              <span>Cost {formatGhs(item.costPrice)}</span>
               <em>{item.isService ? "Service" : `${item.stock} ${item.unit}s`}</em>
-              <div className="card-actions">
-                <button
-                  type="button"
-                  className="icon-button"
-                  onClick={() => onEdit(item)}
-                  aria-label={`Edit ${item.name}`}
-                  title="Edit item"
-                >
-                  <Edit3 size={16} />
-                </button>
-                <button
-                  type="button"
-                  className="icon-button danger"
-                  onClick={() => onDelete(item)}
-                  aria-label={`Delete ${item.name}`}
-                  title="Delete item"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
+              {onEdit || onDelete ? (
+                <div className="card-actions">
+                  {onEdit ? (
+                    <button
+                      type="button"
+                      className="icon-button"
+                      onClick={() => onEdit(item)}
+                      aria-label={`Edit ${item.name}`}
+                      title="Edit item"
+                    >
+                      <Edit3 size={16} />
+                    </button>
+                  ) : null}
+                  {onDelete ? (
+                    <button
+                      type="button"
+                      className="icon-button danger"
+                      onClick={() => onDelete(item)}
+                      aria-label={`Delete ${item.name}`}
+                      title="Delete item"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </article>
         ))}
@@ -2720,8 +2882,12 @@ function InventoryEditor({
             <input value={form.unit} onChange={(event) => update("unit", event.target.value)} />
           </label>
           <label>
-            <span>Price</span>
+            <span>Selling price</span>
             <input type="number" min="0" step="0.01" value={form.price} onChange={(event) => update("price", event.target.value)} />
+          </label>
+          <label>
+            <span>Cost price</span>
+            <input type="number" min="0" step="0.01" value={form.costPrice} onChange={(event) => update("costPrice", event.target.value)} />
           </label>
           <label>
             <span>Stock</span>
@@ -2761,12 +2927,12 @@ function SuppliersPanel({
   onDelete
 }: {
   rows: SupplierRecord[];
-  onAdd: () => void;
-  onEdit: (row: SupplierRecord) => void;
-  onDelete: (row: SupplierRecord) => void;
+  onAdd?: () => void;
+  onEdit?: (row: SupplierRecord) => void;
+  onDelete?: (row: SupplierRecord) => void;
 }) {
   const listRows = rows.map((row) => ({ ...row, raw: row }));
-  return <SimpleList title="Suppliers" eyebrow="Vendor contacts" rows={listRows} onAdd={onAdd} onEdit={(row) => onEdit(row.raw as SupplierRecord)} onDelete={(row) => onDelete(row.raw as SupplierRecord)} />;
+  return <SimpleList title="Suppliers" eyebrow="Vendor contacts" rows={listRows} onAdd={onAdd} onEdit={onEdit ? (row) => onEdit(row.raw as SupplierRecord) : undefined} onDelete={onDelete ? (row) => onDelete(row.raw as SupplierRecord) : undefined} />;
 }
 
 function PurchasesPanel({
@@ -2776,9 +2942,9 @@ function PurchasesPanel({
   onDelete
 }: {
   rows: PurchaseRecord[];
-  onAdd: () => void;
-  onEdit: (row: PurchaseRecord) => void;
-  onDelete: (row: PurchaseRecord) => void;
+  onAdd?: () => void;
+  onEdit?: (row: PurchaseRecord) => void;
+  onDelete?: (row: PurchaseRecord) => void;
 }) {
   const listRows = rows.map((row) => ({
     id: row.id,
@@ -2788,7 +2954,7 @@ function PurchasesPanel({
     active: row.active,
     raw: row
   }));
-  return <SimpleList title="Purchases / Stock Intake" eyebrow="Restock records" rows={listRows} onAdd={onAdd} onEdit={(row) => onEdit(row.raw as PurchaseRecord)} onDelete={(row) => onDelete(row.raw as PurchaseRecord)} />;
+  return <SimpleList title="Purchases / Stock Intake" eyebrow="Restock records" rows={listRows} onAdd={onAdd} onEdit={onEdit ? (row) => onEdit(row.raw as PurchaseRecord) : undefined} onDelete={onDelete ? (row) => onDelete(row.raw as PurchaseRecord) : undefined} />;
 }
 
 function ExpensesPanel({
@@ -2798,9 +2964,9 @@ function ExpensesPanel({
   onDelete
 }: {
   rows: ExpenseRecord[];
-  onAdd: () => void;
-  onEdit: (row: ExpenseRecord) => void;
-  onDelete: (row: ExpenseRecord) => void;
+  onAdd?: () => void;
+  onEdit?: (row: ExpenseRecord) => void;
+  onDelete?: (row: ExpenseRecord) => void;
 }) {
   return (
     <section className="panel">
@@ -2809,9 +2975,11 @@ function ExpensesPanel({
           <p className="eyebrow">Business costs</p>
           <h2>Expenses</h2>
         </div>
-        <button type="button" className="small-action" onClick={onAdd}>
-          <WalletCards size={15} /> Add expense
-        </button>
+        {onAdd ? (
+          <button type="button" className="small-action" onClick={onAdd}>
+            <WalletCards size={15} /> Add expense
+          </button>
+        ) : null}
       </div>
       <div className="stack-list">
         {rows.map((expense) => (
@@ -2821,7 +2989,7 @@ function ExpensesPanel({
               <span>{expense.date} · {expense.method} · {expense.staff}</span>
             </div>
             <em>{formatGhs(expense.amount)}</em>
-            <RowActions onEdit={() => onEdit(expense)} onDelete={() => onDelete(expense)} label={expense.category} />
+            {onEdit || onDelete ? <RowActions onEdit={onEdit ? () => onEdit(expense) : undefined} onDelete={onDelete ? () => onDelete(expense) : undefined} label={expense.category} /> : null}
           </div>
         ))}
       </div>
@@ -2838,8 +3006,8 @@ function QuotesPanel({
 }: {
   rows: QuoteRecord[];
   onAdd: () => void;
-  onEdit: (row: QuoteRecord) => void;
-  onDelete: (row: QuoteRecord) => void;
+  onEdit?: (row: QuoteRecord) => void;
+  onDelete?: (row: QuoteRecord) => void;
   onPrint: (row: QuoteRecord) => void;
 }) {
   return (
@@ -2869,7 +3037,7 @@ function QuotesPanel({
               <button type="button" className="icon-button" onClick={() => onPrint(quote)} aria-label={`Print quote for ${quote.customer}`} title="Print quote">
                 <Printer size={15} />
               </button>
-              <RowActions onEdit={() => onEdit(quote)} onDelete={() => onDelete(quote)} label={quote.customer} />
+              {onEdit || onDelete ? <RowActions onEdit={onEdit ? () => onEdit(quote) : undefined} onDelete={onDelete ? () => onDelete(quote) : undefined} label={quote.customer} /> : null}
             </div>
           </div>
         ))}
@@ -2885,9 +3053,9 @@ function CustomersPanel({
   onDelete
 }: {
   rows: CustomerRecord[];
-  onAdd: () => void;
-  onEdit: (row: CustomerRecord) => void;
-  onDelete: (row: CustomerRecord) => void;
+  onAdd?: () => void;
+  onEdit?: (row: CustomerRecord) => void;
+  onDelete?: (row: CustomerRecord) => void;
 }) {
   return (
     <section className="panel">
@@ -2896,9 +3064,11 @@ function CustomersPanel({
           <p className="eyebrow">Buying history</p>
           <h2>Customers</h2>
         </div>
-        <button type="button" className="small-action" onClick={onAdd}>
-          <Users size={15} /> Add customer
-        </button>
+        {onAdd ? (
+          <button type="button" className="small-action" onClick={onAdd}>
+            <Users size={15} /> Add customer
+          </button>
+        ) : null}
       </div>
       <div className="inventory-grid">
         {rows.map((customer) => (
@@ -2912,7 +3082,7 @@ function CustomersPanel({
               <strong>{formatGhs(customer.balance)}</strong>
               <em>Balance</em>
               <div className="card-actions">
-                <RowActions onEdit={() => onEdit(customer)} onDelete={() => onDelete(customer)} label={customer.name} />
+                {onEdit || onDelete ? <RowActions onEdit={onEdit ? () => onEdit(customer) : undefined} onDelete={onDelete ? () => onDelete(customer) : undefined} label={customer.name} /> : null}
               </div>
             </div>
           </article>
@@ -2984,15 +3154,20 @@ function ReportsPanel({
 }) {
   const [period, setPeriod] = useState<ReportPeriod>("this-month");
   const [reportKind, setReportKind] = useState<ReportKind | null>(null);
-  const inventoryValue = inventoryItems
+  const inventoryCostValue = inventoryItems
+    .filter((item) => !item.isService)
+    .reduce((sum, item) => sum + item.costPrice * item.stock, 0);
+  const inventorySellingValue = inventoryItems
     .filter((item) => !item.isService)
     .reduce((sum, item) => sum + item.price * item.stock, 0);
 
   const filteredSales = salesRecords.filter((sale) => isWithinReportPeriod(sale.date, period));
   const filteredExpenses = expenseRecords.filter((expense) => isWithinReportPeriod(expense.date, period));
   const salesAmount = filteredSales.reduce((sum, sale) => sum + saleTotal(sale), 0);
+  const salesCost = filteredSales.reduce((sum, sale) => sum + saleCost(sale), 0);
+  const grossProfit = filteredSales.reduce((sum, sale) => sum + saleProfit(sale), 0);
+  const grossMargin = profitMargin(grossProfit, salesAmount);
   const discountAmount = filteredSales.reduce((sum, sale) => sum + sale.discount, 0);
-  const remainingInventoryValue = inventoryValue - salesAmount;
   const expensesTotal = filteredExpenses
     .reduce((sum, expense) => sum + expense.amount, 0);
 
@@ -3000,7 +3175,7 @@ function ReportsPanel({
     const byValue: Record<string, number> = {};
     for (const item of inventoryItems) {
       if (!item.isService) {
-        byValue[item.category] = (byValue[item.category] ?? 0) + item.price * item.stock;
+        byValue[item.category] = (byValue[item.category] ?? 0) + item.costPrice * item.stock;
       }
     }
     const entries = Object.entries(byValue);
@@ -3025,9 +3200,12 @@ function ReportsPanel({
   const reportSummary = {
     kind: reportKind ?? "business",
     periodLabel: reportPeriodLabel(period),
-    inventoryValue,
+    inventoryCostValue,
+    inventorySellingValue,
     salesAmount,
-    remainingInventoryValue,
+    salesCost,
+    grossProfit,
+    grossMargin,
     discountAmount,
     expensesTotal,
     openBalances,
@@ -3066,9 +3244,10 @@ function ReportsPanel({
           </label>
         </div>
       </div>
-      <MetricCard icon={BadgeDollarSign} label="Inventory value" value={inventoryValue > 0 ? formatGhs(inventoryValue) : "—"} tone="green" />
+      <MetricCard icon={BadgeDollarSign} label="Inventory cost value" value={inventoryCostValue > 0 ? formatGhs(inventoryCostValue) : "—"} tone="green" />
       <MetricCard icon={ReceiptText} label="Sales amount" value={salesAmount > 0 ? formatGhs(salesAmount) : "—"} tone="gold" />
-      <MetricCard icon={BadgeDollarSign} label="Remaining inventory value" value={formatGhs(remainingInventoryValue)} tone="green" />
+      <MetricCard icon={BadgeDollarSign} label="Gross profit" value={salesAmount > 0 ? formatGhs(grossProfit) : "—"} tone="green" />
+      <MetricCard icon={BadgeDollarSign} label="Profit margin" value={salesAmount > 0 ? formatPercent(grossMargin) : "—"} tone="blue" />
       <MetricCard icon={CreditCard} label="Discounts" value={discountAmount > 0 ? formatGhs(discountAmount) : "—"} tone="blue" />
       <MetricCard icon={CreditCard} label="Expenses" value={expensesTotal > 0 ? formatGhs(expensesTotal) : "—"} tone="red" />
       <MetricCard icon={Boxes} label="Top category" value={topCategory} tone="gold" />
@@ -3205,18 +3384,22 @@ function RowActions({
   onDelete,
   label
 }: {
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
   label: string;
 }) {
   return (
     <div className="row-actions">
-      <button type="button" className="icon-button" onClick={onEdit} aria-label={`Edit ${label}`} title="Edit">
-        <Edit3 size={15} />
-      </button>
-      <button type="button" className="icon-button danger" onClick={onDelete} aria-label={`Delete ${label}`} title="Delete">
-        <Trash2 size={15} />
-      </button>
+      {onEdit ? (
+        <button type="button" className="icon-button" onClick={onEdit} aria-label={`Edit ${label}`} title="Edit">
+          <Edit3 size={15} />
+        </button>
+      ) : null}
+      {onDelete ? (
+        <button type="button" className="icon-button danger" onClick={onDelete} aria-label={`Delete ${label}`} title="Delete">
+          <Trash2 size={15} />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -3407,9 +3590,12 @@ function ReportPrintModal({
   summary: {
     kind: ReportKind;
     periodLabel: string;
-    inventoryValue: number;
+    inventoryCostValue: number;
+    inventorySellingValue: number;
     salesAmount: number;
-    remainingInventoryValue: number;
+    salesCost: number;
+    grossProfit: number;
+    grossMargin: number;
     discountAmount: number;
     expensesTotal: number;
     openBalances: number;
@@ -3467,8 +3653,11 @@ function ReportPrintModal({
           {summary.kind === "business" ? (
             <div className="report-lines">
               <span><strong>Total sales amount</strong><em>{formatGhs(summary.salesAmount)}</em></span>
-              <span><strong>Remaining inventory value</strong><em>{formatGhs(summary.remainingInventoryValue)}</em></span>
-              <span><strong>Total inventory value</strong><em>{formatGhs(summary.inventoryValue)}</em></span>
+              <span><strong>Cost of goods sold</strong><em>{formatGhs(summary.salesCost)}</em></span>
+              <span><strong>Gross profit</strong><em>{formatGhs(summary.grossProfit)}</em></span>
+              <span><strong>Profit margin</strong><em>{formatPercent(summary.grossMargin)}</em></span>
+              <span><strong>Inventory cost value</strong><em>{formatGhs(summary.inventoryCostValue)}</em></span>
+              <span><strong>Inventory selling value</strong><em>{formatGhs(summary.inventorySellingValue)}</em></span>
               <span><strong>Discounts given</strong><em>{formatGhs(summary.discountAmount)}</em></span>
               <span><strong>Expenses</strong><em>{formatGhs(summary.expensesTotal)}</em></span>
               <span><strong>Open customer balances</strong><em>{formatGhs(summary.openBalances)}</em></span>
@@ -3482,17 +3671,22 @@ function ReportPrintModal({
             <>
               <div className="report-lines">
                 <span><strong>Total sales amount</strong><em>{formatGhs(summary.salesAmount)}</em></span>
+                <span><strong>Cost of goods sold</strong><em>{formatGhs(summary.salesCost)}</em></span>
+                <span><strong>Gross profit</strong><em>{formatGhs(summary.grossProfit)}</em></span>
+                <span><strong>Profit margin</strong><em>{formatPercent(summary.grossMargin)}</em></span>
                 <span><strong>Sales count</strong><em>{summary.salesCount}</em></span>
                 <span><strong>Discounts given</strong><em>{formatGhs(summary.discountAmount)}</em></span>
                 <span><strong>Open balances</strong><em>{formatGhs(summary.openBalances)}</em></span>
               </div>
               <ReportTable
-                headers={["Ref", "Customer", "Staff", "Total", "Paid", "Balance"]}
+                headers={["Ref", "Customer", "Staff", "Total", "Cost", "Profit", "Paid", "Balance"]}
                 rows={summary.sales.map((sale) => [
                   sale.ref,
                   sale.customer,
                   sale.staff,
                   formatGhs(saleTotal(sale)),
+                  formatGhs(saleCost(sale)),
+                  formatGhs(saleProfit(sale)),
                   formatGhs(sale.paid),
                   formatGhs(Math.max(saleTotal(sale) - sale.paid, 0))
                 ])}

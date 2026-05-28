@@ -673,6 +673,14 @@ img {
   font-size: .75rem;
 }
 
+.user-pill em {
+  color: var(--muted);
+  text-transform: capitalize;
+  font-size: .72rem;
+  font-style: normal;
+  display: block;
+}
+
 .demo-banner {
   color: #18394d;
   background: #e7f1f7;
