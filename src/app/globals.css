@@ -781,8 +781,15 @@ select:focus {
 }
 
 .metric-card strong {
-  font-size: clamp(1.4rem, 2.6vw, 2rem);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: clamp(1.15rem, 1.7vw, 1.72rem);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
   line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .metric-card.green .metric-icon { background: var(--green); }
@@ -927,6 +934,13 @@ select:focus {
   text-align: left;
 }
 
+.inventory-card {
+  display: grid;
+  gap: 8px;
+  min-height: 148px;
+  padding: 14px;
+}
+
 .product-tile span,
 .inventory-card span,
 .inventory-card p,
@@ -938,7 +952,23 @@ select:focus {
 .product-tile strong,
 .inventory-card h3 {
   margin: 0;
-  overflow-wrap: anywhere;
+}
+
+.product-tile span,
+.product-tile strong,
+.product-tile small,
+.product-tile em,
+.inventory-card span,
+.inventory-card h3,
+.inventory-card p,
+.inventory-meta strong,
+.inventory-meta em {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .product-tile em,
@@ -1017,6 +1047,18 @@ select:focus {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
+}
+
+.totals-box strong,
+.receipt-totals strong,
+.quote-totals-box em,
+.report-lines em {
+  min-width: 0;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .checkout-actions {
@@ -1055,23 +1097,15 @@ th {
   text-transform: uppercase;
 }
 
-.inventory-card {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px;
-}
-
 .inventory-meta {
   display: grid;
-  justify-items: end;
   gap: 8px;
-  text-align: right;
+  min-width: 0;
 }
 
 .card-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
 }
 
@@ -1698,15 +1732,9 @@ th {
     grid-template-columns: 1fr;
   }
 
-  .inventory-card,
   .stack-row {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .inventory-meta {
-    justify-items: start;
-    text-align: left;
   }
 
   .card-actions {
@@ -1715,11 +1743,6 @@ th {
 
   .row-actions {
     justify-content: flex-start;
-  }
-
-  .inventory-meta {
-    justify-items: start;
-    text-align: left;
   }
 
   table {

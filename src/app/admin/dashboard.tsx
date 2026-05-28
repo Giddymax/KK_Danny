@@ -248,6 +248,13 @@ function formatPercent(value: number) {
   return `${value.toFixed(1)}%`;
 }
 
+function filenameText(value: string) {
+  return value
+    .trim()
+    .replace(/[<>:"/\\|?*]+/g, "")
+    .replace(/\s+/g, " ");
+}
+
 function parseSaleDate(dateStr: string): Date | null {
   if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
     return new Date(dateStr.replace(" ", "T"));
@@ -3844,6 +3851,16 @@ function ReceiptModal({ sale, onClose }: { sale: Sale; onClose: () => void }) {
   const total = saleTotal(sale);
   const change = Math.max(sale.paid - total, 0);
   const balance = Math.max(total - sale.paid, 0);
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    const customer = filenameText(sale.customer || "Customer");
+    document.title = `Receipt ${sale.ref}${customer ? ` - ${customer}` : ""}`;
+
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [sale.customer, sale.ref]);
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Receipt preview">
