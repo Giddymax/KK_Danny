@@ -382,6 +382,18 @@ function uniqueSorted(values: string[]) {
   ).sort((left, right) => left.localeCompare(right));
 }
 
+function matchesSearch(query: string, values: Array<string | number | boolean | null | undefined>) {
+  const needle = query.trim().toLowerCase();
+
+  if (!needle) {
+    return true;
+  }
+
+  return values
+    .filter((value) => value !== null && value !== undefined)
+    .some((value) => String(value).toLowerCase().includes(needle));
+}
+
 function moneyInputToNumber(value: string) {
   if (value.trim() === "") {
     return 0;
@@ -677,6 +689,7 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
   const [managedStatus, setManagedStatus] = useState("");
   const [managedPending, setManagedPending] = useState(false);
   const [dashboardPeriod, setDashboardPeriod] = useState<ReportPeriod>("today");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const subtotal = useMemo(
     () => cart.reduce((sum, item) => sum + item.quantity * item.price, 0),
@@ -686,7 +699,43 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
   const amountPaid = moneyInputToNumber(amountPaidInput);
   const total = Math.max(subtotal - discount, 0);
   const lowStock = inventoryItems.filter((item) => !item.isService && item.stock <= item.threshold);
-  const dashboardSales = salesRecords.filter((sale) => isWithinReportPeriod(sale.date, dashboardPeriod));
+  const filteredInventoryItems = inventoryItems.filter((item) =>
+    matchesSearch(searchQuery, [item.name, item.category, item.supplier, item.unit, item.price, item.costPrice, item.stock, item.threshold, item.isService ? "service" : "product"])
+  );
+  const filteredSalesRecords = salesRecords.filter((sale) =>
+    matchesSearch(searchQuery, [
+      sale.ref,
+      sale.customer,
+      sale.phone,
+      sale.date,
+      sale.method,
+      sale.staff,
+      sale.status,
+      sale.paid,
+      saleTotal(sale),
+      Math.max(saleTotal(sale) - sale.paid, 0),
+      ...sale.items.flatMap((item) => [item.name, item.quantity, item.price])
+    ])
+  );
+  const filteredSupplierRecords = supplierRecords.filter((supplier) =>
+    matchesSearch(searchQuery, [supplier.name, supplier.category, supplier.phone, supplier.active ? "active" : "inactive"])
+  );
+  const filteredPurchaseRecords = purchaseRecords.filter((purchase) =>
+    matchesSearch(searchQuery, [purchase.name, purchase.category, purchase.quantity, purchase.unitCost, purchase.date, purchase.active ? "active" : "inactive"])
+  );
+  const filteredExpenseRecords = expenseRecords.filter((expense) =>
+    matchesSearch(searchQuery, [expense.category, expense.amount, expense.method, expense.date, expense.staff, expense.active ? "active" : "inactive"])
+  );
+  const filteredQuoteRecords = quoteRecords.filter((quote) =>
+    matchesSearch(searchQuery, [quote.quoteNumber, quote.customer, quote.phone, quote.request, quote.quantity, quote.totalAmount, quote.status, quote.active ? "active" : "inactive"])
+  );
+  const filteredCustomerRecords = customerRecords.filter((customer) =>
+    matchesSearch(searchQuery, [customer.name, customer.phone, customer.balance, customer.visits, customer.active ? "active" : "inactive"])
+  );
+  const filteredStaffRecords = staffRecords.filter((staff) =>
+    matchesSearch(searchQuery, [staff.name, staff.email, staff.role, staff.active ? "active" : "inactive"])
+  );
+  const dashboardSales = filteredSalesRecords.filter((sale) => isWithinReportPeriod(sale.date, dashboardPeriod));
   const dashboardRevenue = dashboardSales.reduce((sum, sale) => sum + saleTotal(sale), 0);
   const dashboardProfit = dashboardSales.reduce((sum, sale) => sum + saleProfit(sale), 0);
   const dashboardMargin = profitMargin(dashboardProfit, dashboardRevenue);
@@ -2045,7 +2094,12 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
           <div className="topbar-actions">
             <label className="search-box">
               <Search size={17} aria-hidden="true" />
-              <input type="search" placeholder="Search stock, receipt, customer" />
+              <input
+                type="search"
+                placeholder="Search this section"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
             </label>
             <div className="user-pill">
               <span>{isDemo ? "Demo preview" : "Signed in"}</span>
@@ -2130,7 +2184,7 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
             onQuantityBlur={normalizeQuantity}
             onClearCart={clearCart}
             onCheckout={createReceipt}
-            inventoryItems={inventoryItems}
+            inventoryItems={filteredInventoryItems}
           />
         ) : null}
         {managedStatus ? (
@@ -2140,7 +2194,7 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
         ) : null}
         {active === "sales" ? (
           <SalesPanel
-            sales={salesRecords}
+            sales={filteredSalesRecords}
             onAdd={() => setActive("pos")}
             onEdit={isAdmin ? (sale) => openManagedEditor("sale", sale.ref) : undefined}
             onDelete={isAdmin ? (sale) => deleteManagedRecord("sale", sale.ref, sale.ref) : undefined}
@@ -2149,7 +2203,7 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
         ) : null}
         {active === "inventory" ? (
           <InventoryPanel
-            items={inventoryItems}
+            items={filteredInventoryItems}
             status={inventoryStatus}
             onAdd={isAdmin ? () => openInventoryForm() : undefined}
             onEdit={isAdmin ? openInventoryForm : undefined}
@@ -2158,7 +2212,7 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
         ) : null}
         {active === "suppliers" ? (
           <SuppliersPanel
-            rows={supplierRecords}
+            rows={filteredSupplierRecords}
             onAdd={isAdmin ? () => openManagedEditor("supplier") : undefined}
             onEdit={isAdmin ? (row) => openManagedEditor("supplier", row.id) : undefined}
             onDelete={isAdmin ? (row) => deleteManagedRecord("supplier", row.id, row.name) : undefined}
@@ -2166,7 +2220,7 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
         ) : null}
         {active === "purchases" ? (
           <PurchasesPanel
-            rows={purchaseRecords}
+            rows={filteredPurchaseRecords}
             onAdd={isAdmin ? () => openManagedEditor("purchase") : undefined}
             onEdit={isAdmin ? (row) => openManagedEditor("purchase", row.id) : undefined}
             onDelete={isAdmin ? (row) => deleteManagedRecord("purchase", row.id, row.name) : undefined}
@@ -2174,7 +2228,7 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
         ) : null}
         {active === "expenses" ? (
           <ExpensesPanel
-            rows={expenseRecords}
+            rows={filteredExpenseRecords}
             onAdd={isAdmin ? () => openManagedEditor("expense") : undefined}
             onEdit={isAdmin ? (row) => openManagedEditor("expense", row.id) : undefined}
             onDelete={isAdmin ? (row) => deleteManagedRecord("expense", row.id, row.category) : undefined}
@@ -2182,7 +2236,7 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
         ) : null}
         {active === "quotes" ? (
           <QuotesPanel
-            rows={quoteRecords}
+            rows={filteredQuoteRecords}
             onAdd={() => openQuoteEditor()}
             onEdit={isAdmin ? openQuoteEditor : undefined}
             onDelete={isAdmin ? (row) => deleteManagedRecord("quote", row.id, row.customer) : undefined}
@@ -2191,7 +2245,7 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
         ) : null}
         {active === "customers" ? (
           <CustomersPanel
-            rows={customerRecords}
+            rows={filteredCustomerRecords}
             onAdd={isAdmin ? () => openManagedEditor("customer") : undefined}
             onEdit={isAdmin ? (row) => openManagedEditor("customer", row.id) : undefined}
             onDelete={isAdmin ? (row) => deleteManagedRecord("customer", row.id, row.name) : undefined}
@@ -2199,16 +2253,16 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
         ) : null}
         {isAdmin && active === "reports" ? (
           <ReportsPanel
-            inventoryItems={inventoryItems}
-            salesRecords={salesRecords}
-            expenseRecords={expenseRecords}
-            customerRecords={customerRecords}
-            staffRecords={staffRecords}
+            inventoryItems={filteredInventoryItems}
+            salesRecords={filteredSalesRecords}
+            expenseRecords={filteredExpenseRecords}
+            customerRecords={filteredCustomerRecords}
+            staffRecords={filteredStaffRecords}
           />
         ) : null}
         {isAdmin && active === "staff" ? (
           <StaffPanel
-            rows={staffRecords}
+            rows={filteredStaffRecords}
             onAdd={() => openManagedEditor("staff")}
             onEdit={(row) => openManagedEditor("staff", row.id)}
             onDelete={(row) => deleteManagedRecord("staff", row.id, row.name)}
@@ -2227,7 +2281,7 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
           cart={quoteCart}
           total={quoteCart.reduce((sum, item) => sum + item.quantity * item.price, 0)}
           pending={managedPending}
-          inventoryItems={inventoryItems}
+          inventoryItems={filteredInventoryItems}
           onCustomerChange={setQuoteCustomer}
           onPhoneChange={setQuotePhone}
           onAddToCart={addToQuoteCart}
