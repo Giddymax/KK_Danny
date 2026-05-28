@@ -129,23 +129,19 @@ function LoginForm({ supabaseReady, nextPath }) {
     const [showPassword, setShowPassword] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const [pending, setPending] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const [message, setMessage] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])("");
-    const canSubmit = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useMemo"])({
-        "LoginForm.useMemo[canSubmit]": ()=>{
-            return email.includes("@") && password.length >= 6 && !pending;
-        }
-    }["LoginForm.useMemo[canSubmit]"], [
-        email,
-        password,
-        pending
-    ]);
     async function onSubmit(event) {
         event.preventDefault();
         setMessage("");
-        if (!email.includes("@")) {
+        const formData = new FormData(event.currentTarget);
+        const enteredEmail = String(formData.get("email") ?? "").trim();
+        const enteredPassword = String(formData.get("password") ?? "");
+        setEmail(enteredEmail);
+        setPassword(enteredPassword);
+        if (!enteredEmail.includes("@")) {
             setMessage("Enter a valid email address.");
             return;
         }
-        if (password.length < 6) {
+        if (enteredPassword.length < 6) {
             setMessage("Password must be at least 6 characters.");
             return;
         }
@@ -156,8 +152,8 @@ function LoginForm({ supabaseReady, nextPath }) {
         }
         setPending(true);
         const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password
+            email: enteredEmail,
+            password: enteredPassword
         });
         setPending(false);
         if (error) {
@@ -188,7 +184,7 @@ function LoginForm({ supabaseReady, nextPath }) {
                         priority: true
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                        lineNumber: 73,
+                        lineNumber: 76,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -197,26 +193,26 @@ function LoginForm({ supabaseReady, nextPath }) {
                                 children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["brand"].name
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                lineNumber: 75,
+                                lineNumber: 78,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                 children: __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$brand$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["brand"].tagline
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                lineNumber: 76,
+                                lineNumber: 79,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                        lineNumber: 74,
+                        lineNumber: 77,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                lineNumber: 72,
+                lineNumber: 75,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -229,12 +225,12 @@ function LoginForm({ supabaseReady, nextPath }) {
                             size: 22
                         }, void 0, false, {
                             fileName: "[project]/src/app/admin/login/login-form.tsx",
-                            lineNumber: 82,
+                            lineNumber: 85,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                        lineNumber: 81,
+                        lineNumber: 84,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -244,33 +240,33 @@ function LoginForm({ supabaseReady, nextPath }) {
                                 children: "Admin / Staff Portal"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                lineNumber: 85,
+                                lineNumber: 88,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                 children: "Sign in to dashboard"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                lineNumber: 86,
+                                lineNumber: 89,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                 children: "Manage sales, stock, receipts, staff activity, and daily shop records."
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                lineNumber: 87,
+                                lineNumber: 90,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                        lineNumber: 84,
+                        lineNumber: 87,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                lineNumber: 80,
+                lineNumber: 83,
                 columnNumber: 7
             }, this),
             !supabaseReady ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -281,14 +277,14 @@ function LoginForm({ supabaseReady, nextPath }) {
                         children: "Setup needed:"
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                        lineNumber: 93,
+                        lineNumber: 96,
                         columnNumber: 11
                     }, this),
                     " add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to `.env.local` for real authentication."
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                lineNumber: 92,
+                lineNumber: 95,
                 columnNumber: 9
             }, this) : null,
             message ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -297,7 +293,7 @@ function LoginForm({ supabaseReady, nextPath }) {
                 children: message
             }, void 0, false, {
                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                lineNumber: 99,
+                lineNumber: 102,
                 columnNumber: 9
             }, this) : null,
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("form", {
@@ -310,7 +306,7 @@ function LoginForm({ supabaseReady, nextPath }) {
                                 children: "Email"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                lineNumber: 106,
+                                lineNumber: 109,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -321,10 +317,11 @@ function LoginForm({ supabaseReady, nextPath }) {
                                         "aria-hidden": "true"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                        lineNumber: 108,
+                                        lineNumber: 111,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
+                                        name: "email",
                                         type: "email",
                                         value: email,
                                         onChange: (event)=>setEmail(event.target.value),
@@ -332,19 +329,19 @@ function LoginForm({ supabaseReady, nextPath }) {
                                         required: true
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                        lineNumber: 109,
+                                        lineNumber: 112,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                lineNumber: 107,
+                                lineNumber: 110,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                        lineNumber: 105,
+                        lineNumber: 108,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -353,7 +350,7 @@ function LoginForm({ supabaseReady, nextPath }) {
                                 children: "Password"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                lineNumber: 120,
+                                lineNumber: 124,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -364,10 +361,11 @@ function LoginForm({ supabaseReady, nextPath }) {
                                         "aria-hidden": "true"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                        lineNumber: 122,
+                                        lineNumber: 126,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
+                                        name: "password",
                                         type: showPassword ? "text" : "password",
                                         value: password,
                                         onChange: (event)=>setPassword(event.target.value),
@@ -376,7 +374,7 @@ function LoginForm({ supabaseReady, nextPath }) {
                                         minLength: 6
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                        lineNumber: 123,
+                                        lineNumber: 127,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -389,30 +387,30 @@ function LoginForm({ supabaseReady, nextPath }) {
                                             size: 18
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                            lineNumber: 138,
+                                            lineNumber: 143,
                                             columnNumber: 31
                                         }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$eye$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Eye$3e$__["Eye"], {
                                             size: 18
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                            lineNumber: 138,
+                                            lineNumber: 143,
                                             columnNumber: 54
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                        lineNumber: 131,
+                                        lineNumber: 136,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                lineNumber: 121,
+                                lineNumber: 125,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                        lineNumber: 119,
+                        lineNumber: 123,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -427,20 +425,20 @@ function LoginForm({ supabaseReady, nextPath }) {
                                         onChange: (event)=>setRemember(event.target.checked)
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                        lineNumber: 145,
+                                        lineNumber: 150,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                         children: "Remember me"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                        lineNumber: 150,
+                                        lineNumber: 155,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                lineNumber: 144,
+                                lineNumber: 149,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$client$2f$app$2d$dir$2f$link$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -448,32 +446,32 @@ function LoginForm({ supabaseReady, nextPath }) {
                                 children: "Forgot password?"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                lineNumber: 152,
+                                lineNumber: 157,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                        lineNumber: 143,
+                        lineNumber: 148,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                         type: "submit",
                         className: "primary-action",
-                        disabled: !canSubmit,
+                        disabled: pending,
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$log$2d$in$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__LogIn$3e$__["LogIn"], {
                                 size: 18
                             }, void 0, false, {
                                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                                lineNumber: 156,
+                                lineNumber: 161,
                                 columnNumber: 11
                             }, this),
                             pending ? "Signing in..." : "Sign in"
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                        lineNumber: 155,
+                        lineNumber: 160,
                         columnNumber: 9
                     }, this),
                     !supabaseReady ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$client$2f$app$2d$dir$2f$link$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -482,23 +480,23 @@ function LoginForm({ supabaseReady, nextPath }) {
                         children: "Open dashboard preview"
                     }, void 0, false, {
                         fileName: "[project]/src/app/admin/login/login-form.tsx",
-                        lineNumber: 161,
+                        lineNumber: 166,
                         columnNumber: 11
                     }, this) : null
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/admin/login/login-form.tsx",
-                lineNumber: 104,
+                lineNumber: 107,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/admin/login/login-form.tsx",
-        lineNumber: 71,
+        lineNumber: 74,
         columnNumber: 5
     }, this);
 }
-_s(LoginForm, "EFRVkfmw1PsAmAncl3qmGCSfL+I=", false, function() {
+_s(LoginForm, "5o39po3FcHd2brq/fjx+mmo+PLY=", false, function() {
     return [
         __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRouter"]
     ];

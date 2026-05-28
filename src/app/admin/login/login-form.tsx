@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useState } from "react";
 import { Eye, EyeOff, LockKeyhole, LogIn, Mail, ShieldCheck } from "lucide-react";
 import { brand } from "@/lib/brand";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
@@ -22,20 +22,23 @@ export function LoginForm({ supabaseReady, nextPath }: LoginFormProps) {
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
 
-  const canSubmit = useMemo(() => {
-    return email.includes("@") && password.length >= 6 && !pending;
-  }, [email, password, pending]);
-
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
 
-    if (!email.includes("@")) {
+    const formData = new FormData(event.currentTarget);
+    const enteredEmail = String(formData.get("email") ?? "").trim();
+    const enteredPassword = String(formData.get("password") ?? "");
+
+    setEmail(enteredEmail);
+    setPassword(enteredPassword);
+
+    if (!enteredEmail.includes("@")) {
       setMessage("Enter a valid email address.");
       return;
     }
 
-    if (password.length < 6) {
+    if (enteredPassword.length < 6) {
       setMessage("Password must be at least 6 characters.");
       return;
     }
@@ -49,8 +52,8 @@ export function LoginForm({ supabaseReady, nextPath }: LoginFormProps) {
 
     setPending(true);
     const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password
+      email: enteredEmail,
+      password: enteredPassword
     });
     setPending(false);
 
@@ -107,6 +110,7 @@ export function LoginForm({ supabaseReady, nextPath }: LoginFormProps) {
           <div className="field-wrap">
             <Mail size={18} aria-hidden="true" />
             <input
+              name="email"
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
@@ -121,6 +125,7 @@ export function LoginForm({ supabaseReady, nextPath }: LoginFormProps) {
           <div className="field-wrap">
             <LockKeyhole size={18} aria-hidden="true" />
             <input
+              name="password"
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -152,7 +157,7 @@ export function LoginForm({ supabaseReady, nextPath }: LoginFormProps) {
           <Link href="/admin/login">Forgot password?</Link>
         </div>
 
-        <button type="submit" className="primary-action" disabled={!canSubmit}>
+        <button type="submit" className="primary-action" disabled={pending}>
           <LogIn size={18} />
           {pending ? "Signing in..." : "Sign in"}
         </button>
