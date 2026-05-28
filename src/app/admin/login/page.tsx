@@ -1,11 +1,19 @@
 import Image from "next/image";
-import { Suspense } from "react";
 import { brand } from "@/lib/brand";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { LoginForm } from "./login-form";
 
-export default function LoginPage() {
+type LoginPageProps = {
+  searchParams?: Promise<{
+    next?: string | string[];
+  }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
   const supabaseReady = hasSupabaseEnv();
+  const params = await searchParams;
+  const nextValue = Array.isArray(params?.next) ? params.next[0] : params?.next;
+  const nextPath = nextValue?.startsWith("/") ? nextValue : "/admin";
 
   return (
     <main className="login-shell">
@@ -29,9 +37,7 @@ export default function LoginPage() {
       </section>
 
       <section className="login-form-panel" aria-label="Admin staff sign in">
-        <Suspense fallback={<div className="login-card">Loading sign-in...</div>}>
-          <LoginForm supabaseReady={supabaseReady} />
-        </Suspense>
+        <LoginForm supabaseReady={supabaseReady} nextPath={nextPath} />
       </section>
     </main>
   );

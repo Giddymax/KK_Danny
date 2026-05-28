@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 import { Eye, EyeOff, LockKeyhole, LogIn, Mail, ShieldCheck } from "lucide-react";
 import { brand } from "@/lib/brand";
@@ -10,12 +10,11 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 
 type LoginFormProps = {
   supabaseReady: boolean;
+  nextPath: string;
 };
 
-export function LoginForm({ supabaseReady }: LoginFormProps) {
+export function LoginForm({ supabaseReady, nextPath }: LoginFormProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const nextPath = searchParams.get("next") ?? "/admin";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
