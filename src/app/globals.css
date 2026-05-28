@@ -1403,7 +1403,7 @@ th {
 .quote-totals-box span:last-child {
   border-bottom: 0;
   color: white;
-  background: var(--green);
+  background: #0f3f2f;
 }
 
 .quote-totals-box em {
