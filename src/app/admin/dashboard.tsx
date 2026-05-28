@@ -153,6 +153,7 @@ type ExpenseRecord = {
 
 type QuoteRecord = {
   id: string;
+  quoteNumber: string;
   customer: string;
   phone: string;
   request: string;
@@ -349,6 +350,29 @@ function makeDemoId(prefix: string) {
   return `${prefix}-${Date.now()}`;
 }
 
+function formatQuoteNumber(value: number) {
+  return `QT-${String(Math.max(value, 1)).padStart(3, "0")}`;
+}
+
+function quoteNumberValue(quote: Pick<QuoteRecord, "id" | "quoteNumber">) {
+  const fromNumber = quote.quoteNumber.match(/^QT-(\d+)$/i);
+  if (fromNumber) {
+    return Number(fromNumber[1]);
+  }
+
+  const fromDemoId = quote.id.match(/^quote-(\d+)$/i);
+  if (fromDemoId) {
+    return Number(fromDemoId[1]) + 1;
+  }
+
+  return 0;
+}
+
+function nextQuoteNumber(quotes: QuoteRecord[]) {
+  const maxValue = quotes.reduce((max, quote) => Math.max(max, quoteNumberValue(quote)), 0);
+  return formatQuoteNumber(maxValue + 1);
+}
+
 function titleCaseStatus(value: string) {
   return value
     .split("_")
@@ -371,13 +395,13 @@ function isLegacyReceiptCopyNote(value: string | null | undefined) {
   return value?.trim().toLowerCase() === ["customer", "copy"].join(" ");
 }
 
-function parseQuoteDetails(value: unknown): { totalAmount: number; items: CartLine[] } {
+function parseQuoteDetails(value: unknown): { totalAmount: number; items: CartLine[]; quoteNumber?: string } {
   if (typeof value !== "string" || !value.trim()) {
     return { totalAmount: 0, items: [] };
   }
 
   try {
-    const parsed = JSON.parse(value) as { totalAmount?: unknown; items?: unknown };
+    const parsed = JSON.parse(value) as { totalAmount?: unknown; items?: unknown; quoteNumber?: unknown };
     const items = Array.isArray(parsed.items)
       ? parsed.items
           .filter((item): item is Partial<CartLine> & { id: string; name: string } =>
@@ -392,7 +416,8 @@ function parseQuoteDetails(value: unknown): { totalAmount: number; items: CartLi
       : [];
     return {
       totalAmount: Number.isFinite(Number(parsed.totalAmount)) ? Number(parsed.totalAmount) : 0,
-      items
+      items,
+      quoteNumber: typeof parsed.quoteNumber === "string" ? parsed.quoteNumber : undefined
     };
   } catch {
     return { totalAmount: toNumber(value), items: [] };
@@ -560,6 +585,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
   const [quoteRecords, setQuoteRecords] = useState<QuoteRecord[]>(
     isDemo ? quotes.map((quote, index) => ({
       id: `quote-${index}`,
+      quoteNumber: formatQuoteNumber(index + 1),
       customer: quote.customer,
       phone: quote.phone,
       request: quote.request,
@@ -717,11 +743,13 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
       }
 
       if (quotesResult.data) {
+        const quoteRows = quotesResult.data;
         setQuoteRecords(
-          quotesResult.data.map((row) => {
+          quoteRows.map((row, index) => {
             const details = parseQuoteDetails(row.details);
             return {
               id: row.id,
+              quoteNumber: details.quoteNumber ?? formatQuoteNumber(quoteRows.length - index),
               customer: row.customer_name,
               phone: row.phone,
               request: row.requested_items,
@@ -1074,6 +1102,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
     const totalAmount = quoteCart.reduce((sum, item) => sum + item.quantity * item.price, 0);
     const quote: QuoteRecord = {
       id: editingQuote?.id ?? makeDemoId("quote"),
+      quoteNumber: editingQuote?.quoteNumber ?? nextQuoteNumber(quoteRecords),
       customer: quoteCustomer.trim() || "Customer",
       phone: quotePhone.trim(),
       request: quoteCart.map((item) => item.name).join(", "),
@@ -1099,7 +1128,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
           phone: quote.phone,
           requested_items: quote.request,
           quantity: quote.quantity,
-          details: JSON.stringify({ totalAmount: quote.totalAmount, items: quote.items }),
+          details: JSON.stringify({ quoteNumber: quote.quoteNumber, totalAmount: quote.totalAmount, items: quote.items }),
           status: quote.status.toLowerCase().replace(" ", "_"),
           active: quote.active
         };
@@ -1305,8 +1334,12 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
       }
 
       if (managedEditor.kind === "quote") {
+        const existingQuote = managedEditor.itemId
+          ? quoteRecords.find((entry) => entry.id === managedEditor.itemId)
+          : undefined;
         const quote: QuoteRecord = {
           id: managedEditor.itemId ?? makeDemoId("quote"),
+          quoteNumber: existingQuote?.quoteNumber ?? nextQuoteNumber(quoteRecords),
           customer: fieldValue(fields, "customer"),
           phone: fieldValue(fields, "phone"),
           request: fieldValue(fields, "request"),
@@ -1321,7 +1354,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
             phone: quote.phone,
             requested_items: quote.request,
             quantity: quote.quantity,
-            details: String(quote.totalAmount),
+            details: JSON.stringify({ quoteNumber: quote.quoteNumber, totalAmount: quote.totalAmount, items: quote.items ?? [] }),
             status: quote.status.toLowerCase().replace(" ", "_"),
             active: quote.active
           };
@@ -2824,7 +2857,7 @@ function QuotesPanel({
         {rows.map((quote) => (
           <div key={quote.id} className="stack-row">
             <div>
-              <strong>{quote.customer}</strong>
+              <strong>{quote.quoteNumber} · {quote.customer}</strong>
               <span>
                 {quote.phone} · {quote.request}
                 {quote.quantity ? ` · Qty ${quote.quantity}` : ""}
@@ -3298,7 +3331,7 @@ function QuotePrintModal({ quote, onClose }: { quote: QuoteRecord; onClose: () =
             </div>
             <div className="quote-title-block">
               <h1>Quotation</h1>
-              <p>No: {quote.id.toUpperCase()}</p>
+              <p>No: {quote.quoteNumber}</p>
               <p>Date: {quoteDate}</p>
               <p>Valid until: {validityDate}</p>
             </div>
