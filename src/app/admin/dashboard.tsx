@@ -73,6 +73,29 @@ type InventoryRow = {
   is_service: boolean;
 };
 
+type SaleItemRow = {
+  id: string;
+  item_name: string;
+  quantity: number | string;
+  unit_price: number | string;
+};
+
+type SaleRow = {
+  id: string;
+  sale_ref: string;
+  customer_name: string;
+  customer_phone: string | null;
+  payment_method: string;
+  status: string;
+  total: number | string;
+  amount_paid: number | string;
+  discount: number | string;
+  notes: string | null;
+  created_at: string;
+  active: boolean;
+  sale_items?: SaleItemRow[];
+};
+
 type ManagedKind =
   | "sale"
   | "supplier"
@@ -331,6 +354,17 @@ function titleCaseStatus(value: string) {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function saleItemRowsToCart(items: SaleItemRow[] | undefined): CartLine[] {
+  return (items ?? [])
+    .filter((item) => typeof item?.item_name === "string" && item.item_name.trim())
+    .map((item) => ({
+      id: item.id,
+      name: item.item_name,
+      quantity: Number.isFinite(Number(item.quantity)) ? Number(item.quantity) : 1,
+      price: Number.isFinite(Number(item.unit_price)) ? Number(item.unit_price) : 0
+    }));
 }
 
 function isLegacyReceiptCopyNote(value: string | null | undefined) {
@@ -637,7 +671,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
         supabase.from("expenses").select("id,category,amount,expense_date,payment_method,notes,active").eq("active", true).order("expense_date", { ascending: false }),
         supabase.from("quote_requests").select("id,customer_name,phone,requested_items,quantity,details,status,active").eq("active", true).order("created_at", { ascending: false }),
         supabase.from("customers").select("id,name,phone,balance,visits,active").eq("active", true).order("name", { ascending: true }),
-        supabase.from("sales").select("id,sale_ref,customer_name,customer_phone,payment_method,status,total,amount_paid,discount,notes,created_at,active").eq("active", true).order("created_at", { ascending: false }),
+        supabase.from("sales").select("id,sale_ref,customer_name,customer_phone,payment_method,status,total,amount_paid,discount,notes,created_at,active,sale_items(id,item_name,quantity,unit_price)").eq("active", true).order("created_at", { ascending: false }),
         supabase.from("profiles").select("id,email,full_name,role,is_active").order("email", { ascending: true }),
         supabase.from("business_settings").select("key,value").in("key", ["profile", "receipt"])
       ]);
@@ -716,7 +750,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
 
       if (salesResult.data) {
         setSalesRecords(
-          salesResult.data.map((row) => ({
+          (salesResult.data as SaleRow[]).map((row) => ({
             ref: row.sale_ref,
             customer: row.customer_name,
             phone: row.customer_phone ?? "",
@@ -727,7 +761,7 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
             method: row.payment_method,
             staff: row.notes && !isLegacyReceiptCopyNote(row.notes) ? row.notes : userName,
             status: row.status === "part_paid" ? "Part paid" : row.status === "overpaid" ? "Overpaid" : "Paid",
-            items: [],
+            items: saleItemRowsToCart(row.sale_items),
             discount: Number(row.discount),
             paid: Number(row.amount_paid),
             total: Number(row.total),
@@ -1411,8 +1445,13 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
     }
 
     const supabase = isDemo ? null : createBrowserSupabaseClient();
+    const saleToDelete = kind === "sale" ? salesRecords.find((entry) => entry.ref === itemId) : undefined;
 
     try {
+      if (saleToDelete) {
+        await restoreInventoryForDeletedSale(saleToDelete);
+      }
+
       if (supabase) {
         if (kind === "supplier") {
           const { error } = await supabase.from("suppliers").delete().eq("id", itemId);
@@ -1571,6 +1610,44 @@ export function AdminDashboard({ userEmail, userName, isDemo }: AdminDashboardPr
     }
 
     await updateInventoryStock(item.id, item.stock + quantityDelta);
+  }
+
+  async function restoreInventoryForDeletedSale(sale: Sale) {
+    if (!sale.items.length) {
+      return;
+    }
+
+    const restores = new Map<string, { item: InventoryItem; quantity: number }>();
+
+    for (const line of sale.items) {
+      const quantity = Number(line.quantity);
+
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        continue;
+      }
+
+      const inventoryItem =
+        inventoryItems.find((entry) => entry.id === line.id) ??
+        inventoryItems.find((entry) => sameItemName(entry.name, line.name));
+
+      if (!inventoryItem || inventoryItem.isService) {
+        continue;
+      }
+
+      const existing = restores.get(inventoryItem.id);
+      restores.set(inventoryItem.id, {
+        item: inventoryItem,
+        quantity: (existing?.quantity ?? 0) + quantity
+      });
+    }
+
+    if (!restores.size) {
+      return;
+    }
+
+    for (const restore of restores.values()) {
+      await updateInventoryStock(restore.item.id, restore.item.stock + restore.quantity);
+    }
   }
 
   async function createReceipt() {
