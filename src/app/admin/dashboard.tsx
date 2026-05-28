@@ -2975,7 +2975,9 @@ function ReportsPanel({
     return entries.sort(([, a], [, b]) => b - a)[0][0];
   })();
 
-  const openBalances = customerRecords.reduce((sum, c) => sum + c.balance, 0);
+  const salesOpenBalances = filteredSales.reduce((sum, sale) => sum + Math.max(saleTotal(sale) - sale.paid, 0), 0);
+  const customerOpenBalances = customerRecords.reduce((sum, customer) => sum + Math.max(customer.balance, 0), 0);
+  const openBalances = salesOpenBalances > 0 ? salesOpenBalances : customerOpenBalances;
   const lowStockItems = inventoryItems.filter((item) => !item.isService && item.stock <= item.threshold);
   const staffActivity = staffRecords.map((staff) => {
     const sales = filteredSales.filter((sale) => sale.staff === staff.name || sale.staff === staff.email);
@@ -3458,15 +3460,17 @@ function ReportPrintModal({
                 <span><strong>Total sales amount</strong><em>{formatGhs(summary.salesAmount)}</em></span>
                 <span><strong>Sales count</strong><em>{summary.salesCount}</em></span>
                 <span><strong>Discounts given</strong><em>{formatGhs(summary.discountAmount)}</em></span>
+                <span><strong>Open balances</strong><em>{formatGhs(summary.openBalances)}</em></span>
               </div>
               <ReportTable
-                headers={["Ref", "Customer", "Staff", "Total", "Paid"]}
+                headers={["Ref", "Customer", "Staff", "Total", "Paid", "Balance"]}
                 rows={summary.sales.map((sale) => [
                   sale.ref,
                   sale.customer,
                   sale.staff,
                   formatGhs(saleTotal(sale)),
-                  formatGhs(sale.paid)
+                  formatGhs(sale.paid),
+                  formatGhs(Math.max(saleTotal(sale) - sale.paid, 0))
                 ])}
               />
             </>
