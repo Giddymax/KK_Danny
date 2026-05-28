@@ -3553,6 +3553,16 @@ function QuotePrintModal({ quote, onClose }: { quote: QuoteRecord; onClose: () =
     ? requestedItems
     : quoteRecordToCart({ ...quote, request: quote.request || "Requested items" });
 
+  useEffect(() => {
+    const previousTitle = document.title;
+    const customer = filenameText(quote.customer || "Customer");
+    document.title = `Quote ${quote.quoteNumber}${customer ? ` - ${customer}` : ""}`;
+
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [quote.customer, quote.quoteNumber]);
+
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Quote preview">
       <div className="quote-modal">
@@ -3692,6 +3702,15 @@ function ReportPrintModal({
     expenses: "Expense Report",
     staff: "Staff Activity"
   }[summary.kind];
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = `Report ${filenameText(title)} - ${filenameText(summary.periodLabel)}`;
+
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [summary.periodLabel, title]);
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Business report preview">
