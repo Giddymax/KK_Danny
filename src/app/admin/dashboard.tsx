@@ -3336,15 +3336,6 @@ function QuotePrintModal({ quote, onClose }: { quote: QuoteRecord; onClose: () =
                   <td>{item.price > 0 ? formatGhs(item.price * item.quantity) : ""}</td>
                 </tr>
               ))}
-              {Array.from({ length: Math.max(0, 6 - requestedItems.length) }, (_, index) => (
-                <tr key={`${quote.id}-blank-${index}`}>
-                  <td>{requestedItems.length + index + 1}</td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                  <td></td>
-                </tr>
-              ))}
             </tbody>
           </table>
 
