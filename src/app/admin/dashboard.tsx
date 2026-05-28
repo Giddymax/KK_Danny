@@ -119,6 +119,7 @@ type ManagedField = {
   value: string;
   type?: "text" | "number" | "date" | "select" | "password";
   options?: string[];
+  suggestions?: string[];
 };
 
 type ManagedEditorState = {
@@ -368,6 +369,12 @@ function toNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function uniqueSorted(values: string[]) {
+  return Array.from(
+    new Set(values.map((value) => value.trim()).filter(Boolean))
+  ).sort((left, right) => left.localeCompare(right));
+}
+
 function moneyInputToNumber(value: string) {
   if (value.trim() === "") {
     return 0;
@@ -500,19 +507,19 @@ function saleToFields(sale?: Sale): ManagedField[] {
   ];
 }
 
-function supplierToFields(supplier?: SupplierRecord): ManagedField[] {
+function supplierToFields(supplier?: SupplierRecord, categorySuggestions: string[] = []): ManagedField[] {
   return [
     { name: "name", label: "Supplier name", value: supplier?.name ?? "" },
-    { name: "category", label: "Category/contact", value: supplier?.category ?? "" },
+    { name: "category", label: "Category/contact", value: supplier?.category ?? "", suggestions: categorySuggestions },
     { name: "phone", label: "Phone", value: supplier?.phone ?? "" },
     { name: "active", label: "Status", value: supplier?.active === false ? "Inactive" : "Active", type: "select", options: ["Active", "Inactive"] }
   ];
 }
 
-function purchaseToFields(purchase?: PurchaseRecord): ManagedField[] {
+function purchaseToFields(purchase?: PurchaseRecord, itemSuggestions: string[] = [], supplierSuggestions: string[] = []): ManagedField[] {
   return [
-    { name: "name", label: "Item", value: purchase?.name ?? "" },
-    { name: "category", label: "Supplier", value: purchase?.category ?? "" },
+    { name: "name", label: "Item", value: purchase?.name ?? "", suggestions: itemSuggestions },
+    { name: "category", label: "Supplier", value: purchase?.category ?? "", suggestions: supplierSuggestions },
     { name: "quantity", label: "Quantity", value: String(purchase?.quantity ?? 0), type: "number" },
     { name: "unitCost", label: "Unit cost", value: String(purchase?.unitCost ?? 0), type: "number" },
     { name: "date", label: "Purchase date", value: purchase?.date ?? new Date().toISOString().slice(0, 10), type: "date" },
@@ -520,9 +527,9 @@ function purchaseToFields(purchase?: PurchaseRecord): ManagedField[] {
   ];
 }
 
-function expenseToFields(expense?: ExpenseRecord): ManagedField[] {
+function expenseToFields(expense?: ExpenseRecord, categorySuggestions: string[] = []): ManagedField[] {
   return [
-    { name: "category", label: "Category", value: expense?.category ?? "" },
+    { name: "category", label: "Category", value: expense?.category ?? "", suggestions: categorySuggestions },
     { name: "amount", label: "Amount", value: String(expense?.amount ?? 0), type: "number" },
     { name: "method", label: "Payment method", value: expense?.method ?? "Cash", type: "select", options: ["Cash", "Mobile Money", "Bank Transfer", "Card"] },
     { name: "date", label: "Expense date", value: expense?.date ?? new Date().toISOString().slice(0, 10), type: "date" },
@@ -531,11 +538,11 @@ function expenseToFields(expense?: ExpenseRecord): ManagedField[] {
   ];
 }
 
-function quoteToFields(quote?: QuoteRecord): ManagedField[] {
+function quoteToFields(quote?: QuoteRecord, itemSuggestions: string[] = []): ManagedField[] {
   return [
     { name: "customer", label: "Customer", value: quote?.customer ?? "" },
     { name: "phone", label: "Phone", value: quote?.phone ?? "" },
-    { name: "request", label: "Item", value: quote?.request ?? "" },
+    { name: "request", label: "Item", value: quote?.request ?? "", suggestions: itemSuggestions },
     { name: "quantity", label: "Quantity", value: quote?.quantity ?? "", type: "number" },
     { name: "totalAmount", label: "Total amount", value: String(quote?.totalAmount ?? 0), type: "number" },
     { name: "status", label: "Status", value: quote?.status ?? "New", type: "select", options: ["New", "Reviewed", "Quoted", "Completed", "Cancelled"] },
@@ -680,6 +687,37 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
   const dashboardDiscount = dashboardSales.reduce((sum, sale) => sum + sale.discount, 0);
   const pendingQuotesCount = quoteRecords.filter((q) => q.status === "New").length;
   const activeLabel = visibleNavItems.find((item) => item.key === active)?.label ?? visibleNavItems[0]?.label ?? "POS";
+  const inventoryCategoryOptions = useMemo(
+    () => uniqueSorted(inventoryItems.map((item) => item.category)),
+    [inventoryItems]
+  );
+  const businessCategoryOptions = useMemo(
+    () => uniqueSorted([
+      ...inventoryItems.map((item) => item.category),
+      ...supplierRecords.map((supplier) => supplier.category),
+      ...expenseRecords.map((expense) => expense.category)
+    ]),
+    [expenseRecords, inventoryItems, supplierRecords]
+  );
+  const inventoryItemNameOptions = useMemo(
+    () => uniqueSorted([
+      ...inventoryItems.map((item) => item.name),
+      ...purchaseRecords.map((purchase) => purchase.name)
+    ]),
+    [inventoryItems, purchaseRecords]
+  );
+  const supplierNameOptions = useMemo(
+    () => uniqueSorted([
+      ...supplierRecords.map((supplier) => supplier.name),
+      ...inventoryItems.map((item) => item.supplier),
+      ...purchaseRecords.map((purchase) => purchase.category)
+    ]),
+    [inventoryItems, purchaseRecords, supplierRecords]
+  );
+  const expenseCategoryOptions = useMemo(
+    () => uniqueSorted(expenseRecords.map((expense) => expense.category)),
+    [expenseRecords]
+  );
 
   useEffect(() => {
     if (!visibleNavItems.some((item) => item.key === active)) {
@@ -1082,22 +1120,22 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
 
     if (kind === "supplier") {
       const supplier = supplierRecords.find((entry) => entry.id === itemId);
-      setManagedEditor({ kind, itemId, title: `${titlePrefix} supplier`, fields: supplierToFields(supplier) });
+      setManagedEditor({ kind, itemId, title: `${titlePrefix} supplier`, fields: supplierToFields(supplier, businessCategoryOptions) });
     }
 
     if (kind === "purchase") {
       const purchase = purchaseRecords.find((entry) => entry.id === itemId);
-      setManagedEditor({ kind, itemId, title: `${titlePrefix} purchase`, fields: purchaseToFields(purchase) });
+      setManagedEditor({ kind, itemId, title: `${titlePrefix} purchase`, fields: purchaseToFields(purchase, inventoryItemNameOptions, supplierNameOptions) });
     }
 
     if (kind === "expense") {
       const expense = expenseRecords.find((entry) => entry.id === itemId);
-      setManagedEditor({ kind, itemId, title: `${titlePrefix} expense`, fields: expenseToFields(expense) });
+      setManagedEditor({ kind, itemId, title: `${titlePrefix} expense`, fields: expenseToFields(expense, expenseCategoryOptions) });
     }
 
     if (kind === "quote") {
       const quote = quoteRecords.find((entry) => entry.id === itemId);
-      setManagedEditor({ kind, itemId, title: `${titlePrefix} quote`, fields: quoteToFields(quote) });
+      setManagedEditor({ kind, itemId, title: `${titlePrefix} quote`, fields: quoteToFields(quote, inventoryItemNameOptions) });
     }
 
     if (kind === "customer") {
@@ -2198,6 +2236,7 @@ export function AdminDashboard({ userEmail, userName, userRole, isDemo }: AdminD
           form={inventoryForm}
           title={editingItem ? "Edit inventory item" : "Add inventory item"}
           pending={inventoryPending}
+          categoryOptions={inventoryCategoryOptions}
           onChange={setInventoryForm}
           onCancel={closeInventoryForm}
           onSave={saveInventoryItem}
@@ -2836,6 +2875,7 @@ function InventoryEditor({
   form,
   title,
   pending,
+  categoryOptions,
   onChange,
   onCancel,
   onSave
@@ -2843,6 +2883,7 @@ function InventoryEditor({
   form: InventoryFormState;
   title: string;
   pending: boolean;
+  categoryOptions: string[];
   onChange: (form: InventoryFormState) => void;
   onCancel: () => void;
   onSave: () => void;
@@ -2871,7 +2912,14 @@ function InventoryEditor({
           </label>
           <label>
             <span>Category</span>
-            <input value={form.category} onChange={(event) => update("category", event.target.value)} />
+            <input list="inventory-category-options" value={form.category} onChange={(event) => update("category", event.target.value)} />
+            {categoryOptions.length ? (
+              <datalist id="inventory-category-options">
+                {categoryOptions.map((category) => (
+                  <option key={category} value={category} />
+                ))}
+              </datalist>
+            ) : null}
           </label>
           <label>
             <span>Supplier</span>
@@ -3443,14 +3491,24 @@ function ManagedEditor({
                   ))}
                 </select>
               ) : (
-                <input
-                  type={field.type ?? "text"}
-                  min={field.type === "number" ? "0" : undefined}
-                  step={field.type === "number" ? "0.01" : undefined}
-                  autoComplete={field.type === "password" ? "new-password" : undefined}
-                  value={field.value}
-                  onChange={(event) => onChange(field.name, event.target.value)}
-                />
+                <>
+                  <input
+                    type={field.type ?? "text"}
+                    list={field.suggestions?.length ? `managed-${editor.kind}-${field.name}-options` : undefined}
+                    min={field.type === "number" ? "0" : undefined}
+                    step={field.type === "number" ? "0.01" : undefined}
+                    autoComplete={field.type === "password" ? "new-password" : undefined}
+                    value={field.value}
+                    onChange={(event) => onChange(field.name, event.target.value)}
+                  />
+                  {field.suggestions?.length ? (
+                    <datalist id={`managed-${editor.kind}-${field.name}-options`}>
+                      {field.suggestions.map((suggestion) => (
+                        <option key={suggestion} value={suggestion} />
+                      ))}
+                    </datalist>
+                  ) : null}
+                </>
               )}
             </label>
           ))}
